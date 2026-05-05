@@ -56,12 +56,12 @@ from playwright.async_api import async_playwright
 from playwright_stealth import Stealth
 
 # Importamos la función de scrapper.py para enriquecer los datos con IMDB.
-from scrapper import scrapper_pelicula
+from scrapper_david import scrapper_pelicula
 
 # Configuración
 
-BOT_TOKEN = "8771613781:AAGcYxFh8ZHQI_zwAjYoFAkDjpEPcKVndLE"
-CHAT_ID = "1495554491"
+BOT_TOKEN = "8771613781:AAFsfj0JRy6dXydtfj4yEJbtUcdCRdabc68"
+CHAT_ID = "-5191815456"
 
 URL_CARTELERA = "https://www.ecartelera.com/cines/0,30,1.html"
 
