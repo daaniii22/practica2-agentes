@@ -16,14 +16,18 @@ Fases del flujo:
   3. Género: para cada película, visitamos su página en eCartelera y
      buscamos el patrón 'Género: X, Y' con regex sobre el texto completo
      de la página, igual que la duración en scrapper.py, para no depender
-     de un selector concreto que varía entre películas.
+     de un selector concreto que varía entre películas. Se extraen todos
+     los géneros para que el filtro de perfil pueda comprobar cualquiera
+     de ellos, no solo el primero.
 
   4. Filtrado y enriquecimiento: las películas que pasan el filtro de perfil
-     (género presente en el perfil y nota de IMDB por encima del umbral)
-     se consultan en IMDB usando scrapper_pelicula() para obtener nota,
-     votos, sinopsis, director y duración.
+     (alguno de sus géneros presente en el perfil y nota de IMDB por encima
+     del umbral) se consultan en IMDB usando scrapper_pelicula() para obtener
+     nota, votos, sinopsis, director y duración.
 
-  5. Notificación: se envía el resultado formateado por Telegram.
+  5. Notificación: se envía el resultado formateado por Telegram, dividiendo
+     en varios mensajes si se supera el límite de 4096 caracteres, siempre
+     respetando el límite entre películas para no cortar una entrada a mitad.
 
 Decisiones de diseño:
 --------------------
@@ -55,7 +59,6 @@ import argparse
 from playwright.async_api import async_playwright
 from playwright_stealth import Stealth
 
-# Importamos la función de scrapper.py para enriquecer los datos con IMDB.
 from scrapper_david import scrapper_pelicula
 
 # Configuración
@@ -68,17 +71,17 @@ URL_CARTELERA = "https://www.ecartelera.com/cines/0,30,1.html"
 # Perfil por defecto: género → nota mínima de IMDB para pasar el filtro.
 # Géneros disponibles en eCartelera (comentar/descomentar según preferencia):
 PERFIL_DEFAULT = {
-    "Acción": 1,
-    "Animación": 1,
-    "Aventura": 1,
+    "Acción": 6,
+    "Animación": 5,
+    # "Aventura":      6,
     # "Biografía":     7,
-    "Ciencia ficción": 1,
-    "Comedia": 1,
+    "Ciencia ficción": 7,
+    "Comedia": 6,
     # "Crimen":        6,
     # "Deporte":       6,
     # "Documental":    7,
-    "Drama": 1,
-    "Erótica": 1,
+    "Drama": 7,
+    # "Erótica":       6,
     # "Familiar":      5,
     # "Fantasía":      6,
     # "Guerra":        7,
@@ -86,10 +89,10 @@ PERFIL_DEFAULT = {
     # "LGTB":          6,
     # "Misterio":      6,
     # "Música":        6,
-    "Romance": 1,
-    "Suspense": 1,
-    "Terror": 1,
-    "Thriller": 1,
+    # "Romance":       6,
+    # "Suspense":      6,
+    "Terror": 6,
+    "Thriller": 6,
     # "Western":       6,
 }
 
@@ -118,26 +121,30 @@ def limpiar(texto: str) -> str:
     return " ".join(texto.split())
 
 
-def extraer_genero(texto: str) -> str:
+def extraer_genero(texto: str) -> list[str]:
     """
-    Extrae el género principal de la página de una película en eCartelera.
+    Extrae todos los géneros de la página de una película en eCartelera.
 
     eCartelera muestra los géneros en un bloque con el patrón 'Género: X, Y, Z'.
-    Extraemos el primero como género principal para aplicar el filtro del perfil.
-    Buscamos el patrón en el texto completo del body, igual que la duración
-    en scrapper.py, para no depender de un selector concreto.
+    Devolvemos todos para que el filtro de perfil pueda comprobar cualquiera de ellos,
+    no solo el primero. Buscamos el patrón en el texto completo del body, igual que
+    la duración en scrapper.py, para no depender de un selector concreto.
 
     Args:
         texto: Texto completo del body de la página de la película en eCartelera.
 
     Returns:
-        Primer género encontrado o 'Desconocido' si no se encuentra.
+        Lista de géneros encontrados o ['Desconocido'] si no se encuentra.
     """
     match = re.search(r"G[eé]nero[s]?:?\s*([A-Za-záéíóúÁÉÍÓÚüÜñÑ ,\-]+)", texto)
     if match:
-        generos = match.group(1).strip().split(",")
-        return generos[0].strip()
-    return "Desconocido"
+        # Dividimos por espacio simple entre palabras que empiezan por mayúscula,
+        # ya que eCartelera separa géneros con espacios: "Comedia Drama Thriller"
+        generos = re.findall(
+            r"[A-ZÁÉÍÓÚ][a-záéíóúüñ]+(?: [a-záéíóúüñ]+)*", match.group(1)
+        )
+        return generos if generos else ["Desconocido"]
+    return ["Desconocido"]
 
 
 def formatear_mensaje(peliculas: list[dict]) -> str:
@@ -164,6 +171,9 @@ def formatear_mensaje(peliculas: list[dict]) -> str:
             f"  📝 {p['sinopsis']}\n"
         )
     return "\n\n".join(lineas)
+
+
+# Telegram
 
 
 def enviar_telegram(mensaje: str) -> None:
@@ -316,9 +326,9 @@ async def scrapper_cartelera(
 
             print(f"   → {len(peliculas_cartelera)} películas encontradas.")
 
-            # 3. Extracción de género desde la página de cada película
-            # Buscamos el patrón de género en el texto completo de la página
-            # para no depender de un selector concreto que varía entre películas.
+            # 3. Extracción de géneros desde la página de cada película
+            # Extraemos todos los géneros para que el filtro pueda comprobar
+            # cualquiera de ellos, no solo el primero.
             print("3. Obteniendo géneros.")
             for peli in peliculas_cartelera:
                 try:
@@ -327,9 +337,9 @@ async def scrapper_cartelera(
                     )
                     await page.wait_for_selector("body", timeout=10000)
                     page_text = await page.inner_text("body")
-                    peli["genero"] = extraer_genero(page_text)
+                    peli["generos"] = extraer_genero(page_text)
                 except Exception:
-                    peli["genero"] = "Desconocido"
+                    peli["generos"] = ["Desconocido"]
 
         except Exception as e:
             # Error en la navegación o extracción.
@@ -348,10 +358,12 @@ async def scrapper_cartelera(
     resultado = []
 
     for peli in peliculas_cartelera:
-        genero = peli.get("genero", "Desconocido")
+        generos = peli.get("generos", ["Desconocido"])
 
-        # Si hay perfil activo, solo procesamos géneros que estén en él.
-        if perfil and genero not in perfil:
+        # Si hay perfil activo, comprobamos si alguno de los géneros está en él.
+        # Así una película de 'Acción Ciencia ficción' pasa el filtro si
+        # cualquiera de los dos géneros está en el perfil.
+        if perfil and not any(g in perfil for g in generos):
             continue
 
         # Consultamos IMDB usando el scrapper ya implementado.
@@ -366,14 +378,16 @@ async def scrapper_cartelera(
         except (ValueError, AttributeError):
             nota = 0.0
 
-        # Aplicamos el umbral de nota mínima para el género.
-        if perfil and nota < perfil[genero]:
-            continue
+        # Aplicamos el umbral de nota mínima más exigente de los géneros que matchearon.
+        if perfil:
+            nota_minima = max(perfil[g] for g in generos if g in perfil)
+            if nota < nota_minima:
+                continue
 
         resultado.append(
             {
                 "titulo": datos_imdb.get("titulo", peli["titulo"]),
-                "genero": genero,
+                "genero": ", ".join(generos),
                 "nota": datos_imdb.get("nota", "N/A"),
                 "votos": datos_imdb.get("votos", "N/A"),
                 "director": datos_imdb.get("director", "N/A"),
