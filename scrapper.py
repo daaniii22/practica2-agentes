@@ -4,16 +4,16 @@ Scraper de películas en IMDb usando Playwright.
 Fases del flujo:
 --------------------
   1. Búsqueda: navegamos a la URL de búsqueda de IMDb para esa película.
-     De esta forma evitamos la homepage para ahorrar una carga de página completa, 
+     De esta forma evitamos la homepage para ahorrar una carga de página completa,
      además de aprovechar el SEO de la página de resultados.
 
-  2. Selección: clicamos el primer resultado de la lista de títulos.
+  2. Selección: clickeamos el primer resultado de la lista de títulos.
      El selector está acotado al contenedor de resultados para no
      confundirlo con links de navegación del header.
 
   3. Extracción: una vez en la ficha, cada campo tiene su propia función
      auxiliar con su estrategia de extracción.
-     
+
 Decisiones de diseño:
 --------------------
 - Se usa locale='es-ES' para obtener los textos en español (nota, votos,
@@ -32,13 +32,14 @@ Ejemplo de uso:
 """
 
 import asyncio
-import sys
 import json
 import re
+import os
+import glob
+import argparse
 from playwright.async_api import async_playwright
 from playwright_stealth import Stealth
 import logging
-import glob
 
 # Configuración básica de logging para facilitar el debug y seguimiento de la ejecución.
 logger = logging.getLogger()
@@ -46,13 +47,14 @@ logger.setLevel(logging.INFO)
 
 # Funciones de limpieza y extracción de datos con regex
 
+
 def limpiar(texto: str) -> str:
     """
     Normaliza el texto de un elemento web.
 
     Los textos obtenidos con Playwright pueden contener saltos de línea o espacios
     múltiples por el HTML. Esta función los deja un único espacio. En la práctica,
-    esta función no suele ser necesaria pero la usamos por si nos encontramos cosas 
+    esta función no suele ser necesaria pero la usamos por si nos encontramos cosas
     del tipo 'Christopher\n Nolan' o '2h  49min' con doble espacio.
 
     Args:
@@ -63,7 +65,7 @@ def limpiar(texto: str) -> str:
     """
     if not texto:
         return "N/A"
-    
+
     return " ".join(texto.split())
 
 
@@ -123,11 +125,31 @@ def extraer_duracion(texto: str) -> str:
     return match.group(1) if match else "N/A"
 
 
-def get_chromium_path() -> str:
-    rutas = glob.glob("/ms-playwright/chromium-*/chrome-linux/chrome")
-    if not rutas:
-        raise FileNotFoundError("No se encontró el binario de Chromium en /ms-playwright")
-    return rutas[0]
+def en_lambda() -> bool:
+    return bool(os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+
+
+def get_chromium_path() -> str | None:
+    if en_lambda():
+        rutas = glob.glob("/ms-playwright/chromium-*/chrome-linux/chrome")
+        if not rutas:
+            raise FileNotFoundError(
+                "No se encontró el binario de Chromium en /ms-playwright"
+            )
+        return rutas[0]
+    return None
+
+
+def get_browser_args() -> list:
+    if en_lambda():
+        return [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-gpu",
+            "--single-process",
+        ]
+    return []
 
 
 # Scraper principal
@@ -153,20 +175,14 @@ async def scrapper_pelicula(nombre_busqueda: str, headless: bool = True) -> dict
     async with async_playwright() as p:
         # Usamos como navegador Chromium por su buena compatibilidad con Playwright y su rendimiento.
         browser = await p.chromium.launch(
-            headless=True,
+            headless=headless,
             executable_path=get_chromium_path(),
-            args=[
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-dev-shm-usage",  # /dev/shm es muy pequeño en Lambda
-                "--disable-gpu",             # Lambda no tiene GPU
-                "--single-process",          # reduce el uso de memoria
-                ]
-            )
+            args=get_browser_args(),
+        )
         context = await browser.new_context(
             # Forzamos español para obtener sinopsis y metadatos en castellano.
             # El regex de votos cubre sufijos en ambos idiomas por si IMDb
-            # mezcla según la IP del usuario. El contexto es como una sesión independiente con su propia 
+            # mezcla según la IP del usuario. El contexto es como una sesión independiente con su propia
             # configuración de idioma, cookies, etc.
             locale="es-ES",
             user_agent=(
@@ -188,14 +204,14 @@ async def scrapper_pelicula(nombre_busqueda: str, headless: bool = True) -> dict
             # por la homepage y usar la barra de búsqueda. Esto ahorra
             # una carga de página completa.
             # ttype=ft filtra solo largometrajes (feature films).
-            # Usamos wait_until="domcontentloaded" para continuar cuando el HTML básico esté listo, 
+            # Usamos wait_until="domcontentloaded" para continuar cuando el HTML básico esté listo,
             # sin esperar a que carguen otros recursos secundarios.
             logger.info("1. Buscando en IMDb.")
             query = nombre_busqueda.replace(" ", "+")
             await page.goto(
                 f"https://www.imdb.com/find?q={query}&s=tt&ttype=ft",
                 wait_until="domcontentloaded",
-            ) 
+            )
 
             # El banner de cookies no siempre aparece; si no lo hay en
             # 3 segundos, continuamos.
@@ -235,9 +251,7 @@ async def scrapper_pelicula(nombre_busqueda: str, headless: bool = True) -> dict
 
             # Título
             try:
-                res["titulo"] = limpiar(
-                    await page.locator("h1").first.inner_text()
-                )
+                res["titulo"] = limpiar(await page.locator("h1").first.inner_text())
             except Exception:
                 res["titulo"] = "N/A"
 
@@ -249,7 +263,9 @@ async def scrapper_pelicula(nombre_busqueda: str, headless: bool = True) -> dict
                 logger.info("Rating.")
                 rating_loc = (
                     page.locator("div")
-                    .filter(has_text=re.compile(r"PUNTUACI[ÓO]N|RATING|IMDb RATING", re.I))
+                    .filter(
+                        has_text=re.compile(r"PUNTUACI[ÓO]N|RATING|IMDb RATING", re.I)
+                    )
                     .first
                 )
                 raw_rating = await rating_loc.inner_text()
@@ -260,8 +276,8 @@ async def scrapper_pelicula(nombre_busqueda: str, headless: bool = True) -> dict
                 res["votos"] = "N/A"
 
             # Sinopsis
-            # IMDb usa data-testid 'plot-xl' en la ficha principal. Esto lo sabemos por 
-            # inspeccionar el HTML, pero para hacerlo más robusto, usamos un selector que 
+            # IMDb usa data-testid 'plot-xl' en la ficha principal. Esto lo sabemos por
+            # inspeccionar el HTML, pero para hacerlo más robusto, usamos un selector que
             # busque cualquier atributo que empiece por 'plot'.
             # El selector ^= (empieza por) cubre variantes como 'plot-l'.
             try:
@@ -273,7 +289,7 @@ async def scrapper_pelicula(nombre_busqueda: str, headless: bool = True) -> dict
 
             # Director
             # Filtramos el <li> que contiene la palabra 'Director' o 'Dirección'
-            # y extraemos el primer link dentro de él. Se omiten los anclajes ^ y $ 
+            # y extraemos el primer link dentro de él. Se omiten los anclajes ^ y $
             # para no depender de que el texto del <li> sea exactamente esa palabra y nada más.
             try:
                 logger.info("Director.")
@@ -308,20 +324,41 @@ async def scrapper_pelicula(nombre_busqueda: str, headless: bool = True) -> dict
             return {"error": str(e)}
 
         finally:
-            # Cerramos el navegador siempre, tanto si hubo error como si no. 
+            # Cerramos el navegador siempre, tanto si hubo error como si no.
             await browser.close()
 
 
-# Ejecución 
+# Ejecución
 async def main():
-    if len(sys.argv) < 2:
-        logger.error("Uso: python scrapper.py <nombre de la película>")
-        logger.error('Ejemplo: python3 scrapper.py "Torrente"')
+    parser = argparse.ArgumentParser(
+        description="Consulta información de una película en IMDb"
+    )
+    parser.add_argument("pelicula", nargs="+", help="Nombre de la película a consultar")
+    parser.add_argument(
+        "--campo",
+        type=str,
+        choices=["titulo", "nota", "votos", "sinopsis", "director", "duracion"],
+        help="Campo concreto a devolver (si no se indica, devuelve todos)",
+    )
+    parser.add_argument(
+        "--headless",
+        action="store_false",
+        dest="headless",
+        help="Abre el navegador en modo visible (útil para depuración)",
+    )
+    args = parser.parse_args()
+
+    nombre = " ".join(args.pelicula)
+    resultado = await scrapper_pelicula(nombre, headless=args.headless)
+
+    if "error" in resultado:
+        logger.error(f"Error: {resultado['error']}")
         return
-    nombre = " ".join(sys.argv[1:])
-    resultado = await scrapper_pelicula(nombre)
-    logger.info("\nResultado:")
-    logger.info(json.dumps(resultado, indent=4, ensure_ascii=False))
+
+    if args.campo:
+        print(resultado.get(args.campo, "N/A"))
+    else:
+        print(json.dumps(resultado, indent=4, ensure_ascii=False))
 
 
 if __name__ == "__main__":

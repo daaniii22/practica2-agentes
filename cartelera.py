@@ -60,7 +60,7 @@ import argparse
 from playwright.async_api import async_playwright
 from playwright_stealth import Stealth
 
-from scrapper_david import scrapper_pelicula
+from scrapper import scrapper_pelicula
 
 # Configuración básica de logging para facilitar el debug y seguimiento de la ejecución.
 logger = logging.getLogger()
