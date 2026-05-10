@@ -32,12 +32,18 @@ Ejemplo de uso:
 """
 
 import asyncio
-import sys
 import json
 import re
+import os
+import glob
+import argparse
 from playwright.async_api import async_playwright
 from playwright_stealth import Stealth
-import argparse
+import logging
+
+# Configuración básica de logging para facilitar el debug y seguimiento de la ejecución.
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 # Funciones de limpieza y extracción de datos con regex
 
@@ -119,9 +125,34 @@ def extraer_duracion(texto: str) -> str:
     return match.group(1) if match else "N/A"
 
 
+def en_lambda() -> bool:
+    return bool(os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+
+
+def get_chromium_path() -> str | None:
+    if en_lambda():
+        rutas = glob.glob("/ms-playwright/chromium-*/chrome-linux/chrome")
+        if not rutas:
+            raise FileNotFoundError(
+                "No se encontró el binario de Chromium en /ms-playwright"
+            )
+        return rutas[0]
+    return None
+
+
+def get_browser_args() -> list:
+    if en_lambda():
+        return [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-gpu",
+            "--single-process",
+        ]
+    return []
+
+
 # Scraper principal
-
-
 async def scrapper_pelicula(nombre_busqueda: str, headless: bool = True) -> dict:
     """
     Dado el nombre de una película, devuelve sus datos de IMDb.
@@ -143,8 +174,11 @@ async def scrapper_pelicula(nombre_busqueda: str, headless: bool = True) -> dict
 
     async with async_playwright() as p:
         # Usamos como navegador Chromium por su buena compatibilidad con Playwright y su rendimiento.
-        browser = await p.chromium.launch(headless=headless)
-
+        browser = await p.chromium.launch(
+            headless=headless,
+            executable_path=get_chromium_path(),
+            args=get_browser_args(),
+        )
         context = await browser.new_context(
             # Forzamos español para obtener sinopsis y metadatos en castellano.
             # El regex de votos cubre sufijos en ambos idiomas por si IMDb
@@ -172,7 +206,7 @@ async def scrapper_pelicula(nombre_busqueda: str, headless: bool = True) -> dict
             # ttype=ft filtra solo largometrajes (feature films).
             # Usamos wait_until="domcontentloaded" para continuar cuando el HTML básico esté listo,
             # sin esperar a que carguen otros recursos secundarios.
-            print("1. Buscando en IMDb.")
+            logger.info("1. Buscando en IMDb.")
             query = nombre_busqueda.replace(" ", "+")
             await page.goto(
                 f"https://www.imdb.com/find?q={query}&s=tt&ttype=ft",
@@ -183,7 +217,7 @@ async def scrapper_pelicula(nombre_busqueda: str, headless: bool = True) -> dict
             # 3 segundos, continuamos.
             try:
                 await page.get_by_test_id("accept-button").click(timeout=3000)
-                print("Cookies aceptadas.")
+                logger.info("Cookies aceptadas.")
             except Exception:
                 pass
 
@@ -191,7 +225,7 @@ async def scrapper_pelicula(nombre_busqueda: str, headless: bool = True) -> dict
             # Acotamos el selector a .ipc-metadata-list-summary-item para
             # no confundir los resultados con links de /title/tt que también
             # aparecen en el header de navegación y en publicidad.
-            print("2. Seleccionando primer resultado.")
+            logger.info("2. Seleccionando primer resultado.")
             # Esperamos a que aparezca el primer resultado de título. Si no aparece en 15 segundos, error.
             await page.wait_for_selector(
                 ".ipc-metadata-list-summary-item a[href*='/title/tt']",
@@ -206,13 +240,13 @@ async def scrapper_pelicula(nombre_busqueda: str, headless: bool = True) -> dict
             # Esperamos el h1 como señal mínima de que la ficha ha cargado.
             # No usamos networkidle porque IMDb tiene peticiones publicitarias
             # continuas que hacen que nunca se cumpla ese estado.
-            print("3. Cargando ficha de la película.")
+            logger.info("3. Cargando ficha de la película.")
             await page.wait_for_selector("h1", timeout=15000)
 
             # 4. Extracción de los campos deseados
             # Cada campo va en su propio try/except para que un fallo
             # puntual no aborte la extracción del resto.
-            print("4. Extrayendo datos.")
+            logger.info("4. Extrayendo datos.")
             res = {}
 
             # Título
@@ -226,7 +260,7 @@ async def scrapper_pelicula(nombre_busqueda: str, headless: bool = True) -> dict
             # mostrar la etiqueta en español ('PUNTUACIÓN') o en inglés
             # ('RATING', 'IMDb RATING') según la IP, así que cubrimos ambos.
             try:
-                print("Rating.")
+                logger.info("Rating.")
                 rating_loc = (
                     page.locator("div")
                     .filter(
@@ -247,7 +281,7 @@ async def scrapper_pelicula(nombre_busqueda: str, headless: bool = True) -> dict
             # busque cualquier atributo que empiece por 'plot'.
             # El selector ^= (empieza por) cubre variantes como 'plot-l'.
             try:
-                print("Sinopsis.")
+                logger.info("Sinopsis.")
                 sinopsis_loc = page.locator('[data-testid^="plot"]').first
                 res["sinopsis"] = limpiar(await sinopsis_loc.inner_text())
             except Exception:
@@ -258,7 +292,7 @@ async def scrapper_pelicula(nombre_busqueda: str, headless: bool = True) -> dict
             # y extraemos el primer link dentro de él. Se omiten los anclajes ^ y $
             # para no depender de que el texto del <li> sea exactamente esa palabra y nada más.
             try:
-                print("Director.")
+                logger.info("Director.")
                 director_loc = (
                     page.locator("li")
                     .filter(has_text=re.compile(r"Direcci[oó]n|Director", re.I))
@@ -275,20 +309,18 @@ async def scrapper_pelicula(nombre_busqueda: str, headless: bool = True) -> dict
             # para no depender de un selector concreto que varía según el
             # tipo de contenido (serie, película, corto).
             try:
-                print("Duración.")
+                logger.info("Duración.")
                 page_text = await page.inner_text("body")
                 res["duracion"] = extraer_duracion(page_text)
             except Exception:
                 res["duracion"] = "N/A"
 
-            print("Extracción finalizada.")
+            logger.info("Extracción finalizada.")
             return res
 
         except Exception as e:
             # Error en la navegación o selección.
-            # Guardamos una captura para facilitar el debug.
-            print(f"Error: {e}")
-            await page.screenshot(path="debug_error.png")
+            logger.error(f"Error: {e}")
             return {"error": str(e)}
 
         finally:
@@ -297,8 +329,6 @@ async def scrapper_pelicula(nombre_busqueda: str, headless: bool = True) -> dict
 
 
 # Ejecución
-
-
 async def main():
     parser = argparse.ArgumentParser(
         description="Consulta información de una película en IMDb"
@@ -308,13 +338,13 @@ async def main():
         "--campo",
         type=str,
         choices=["titulo", "nota", "votos", "sinopsis", "director", "duracion"],
-        help="Campo concreto a devolver",
+        help="Campo concreto a devolver (si no se indica, devuelve todos)",
     )
     parser.add_argument(
         "--headless",
         action="store_false",
         dest="headless",
-        help="Abre el navegador en modo visible",
+        help="Abre el navegador en modo visible (útil para depuración)",
     )
     args = parser.parse_args()
 
@@ -322,13 +352,12 @@ async def main():
     resultado = await scrapper_pelicula(nombre, headless=args.headless)
 
     if "error" in resultado:
-        print(f"Error: {resultado['error']}")
+        logger.error(f"Error: {resultado['error']}")
         return
 
     if args.campo:
         print(resultado.get(args.campo, "N/A"))
     else:
-        print("\nResultado:")
         print(json.dumps(resultado, indent=4, ensure_ascii=False))
 
 

@@ -54,6 +54,7 @@ Ejemplo de uso:
 import asyncio
 import json
 import re
+import logging
 import requests
 import argparse
 from playwright.async_api import async_playwright
@@ -61,7 +62,11 @@ from playwright_stealth import Stealth
 
 from scrapper_david import scrapper_pelicula
 
-# Configuración
+# Configuración básica de logging para facilitar el debug y seguimiento de la ejecución.
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+# ── Configuración ─────────────────────────────────────────────────────────────
 
 BOT_TOKEN = "8771613781:AAFsfj0JRy6dXydtfj4yEJbtUcdCRdabc68"
 CHAT_ID = "-5191815456"
@@ -97,7 +102,7 @@ PERFIL_DEFAULT = {
 }
 
 
-# Funciones de limpieza y extracción de datos con regex
+# ── Funciones de limpieza y extracción ───────────────────────────────────────
 
 
 def limpiar(texto: str) -> str:
@@ -117,7 +122,6 @@ def limpiar(texto: str) -> str:
     """
     if not texto:
         return "N/A"
-
     return " ".join(texto.split())
 
 
@@ -173,7 +177,7 @@ def formatear_mensaje(peliculas: list[dict]) -> str:
     return "\n\n".join(lineas)
 
 
-# Telegram
+# ── Telegram ──────────────────────────────────────────────────────────────────
 
 
 def enviar_telegram(mensaje: str) -> None:
@@ -218,7 +222,7 @@ def enviar_telegram(mensaje: str) -> None:
         requests.post(url, json=payload)
 
 
-# Scraper principal
+# ── Scraper principal ─────────────────────────────────────────────────────────
 
 
 async def scrapper_cartelera(
@@ -267,21 +271,21 @@ async def scrapper_cartelera(
             # 1. Carga de la cartelera
             # Usamos wait_until="domcontentloaded" para continuar cuando el HTML básico esté listo,
             # sin esperar a que carguen otros recursos secundarios.
-            print("1. Cargando cartelera de Madrid.")
+            logger.info("1. Cargando cartelera de Madrid.")
             await page.goto(URL_CARTELERA, wait_until="domcontentloaded")
 
             # El banner de cookies no siempre aparece; si no lo hay en
             # 3 segundos, continuamos.
             try:
                 await page.get_by_test_id("accept-button").click(timeout=3000)
-                print("Cookies aceptadas.")
+                logger.info("Cookies aceptadas.")
             except Exception:
                 pass
 
             # 2. Extracción de títulos y URLs
             # Esperamos a que aparezca el primer enlace de película. Si no aparece en 15 segundos, error.
             # Los enlaces de película en eCartelera contienen '/peliculas/' en su href.
-            print("2. Extrayendo lista de películas.")
+            logger.info("2. Extrayendo lista de películas.")
             await page.wait_for_selector("a[href*='/peliculas/']", timeout=15000)
 
             enlaces = await page.locator("a[href*='/peliculas/']").all()
@@ -324,12 +328,12 @@ async def scrapper_cartelera(
             if limite:
                 peliculas_cartelera = peliculas_cartelera[:limite]
 
-            print(f"   → {len(peliculas_cartelera)} películas encontradas.")
+            logger.info(f"   → {len(peliculas_cartelera)} películas encontradas.")
 
             # 3. Extracción de géneros desde la página de cada película
             # Extraemos todos los géneros para que el filtro pueda comprobar
             # cualquiera de ellos, no solo el primero.
-            print("3. Obteniendo géneros.")
+            logger.info("3. Obteniendo géneros.")
             for peli in peliculas_cartelera:
                 try:
                     await page.goto(
@@ -344,7 +348,7 @@ async def scrapper_cartelera(
         except Exception as e:
             # Error en la navegación o extracción.
             # Guardamos una captura para facilitar el debug.
-            print(f"Error: {e}")
+            logger.error(f"Error: {e}")
             await page.screenshot(path="debug_cartelera.png")
 
         finally:
@@ -354,7 +358,7 @@ async def scrapper_cartelera(
     # 4. Filtrado por perfil y enriquecimiento con IMDB
     # Esto se hace fuera del bloque del navegador para cerrarlo cuanto antes
     # y liberar recursos antes de lanzar las consultas a IMDB.
-    print("4. Filtrando por perfil y consultando IMDB.")
+    logger.info("4. Filtrando por perfil y consultando IMDB.")
     resultado = []
 
     for peli in peliculas_cartelera:
@@ -399,7 +403,7 @@ async def scrapper_cartelera(
     return resultado
 
 
-# Ejecución
+# ── Ejecución por línea de comandos ───────────────────────────────────────────
 
 
 async def main():
@@ -437,7 +441,7 @@ async def main():
         try:
             perfil = json.loads(args.perfil)
         except json.JSONDecodeError:
-            print("Error: el perfil no es un JSON válido.")
+            logger.error("Error: el perfil no es un JSON válido.")
             return
     else:
         perfil = PERFIL_DEFAULT
@@ -448,12 +452,12 @@ async def main():
         limite=args.limite,
     )
 
-    print("\nResultado:")
-    print(json.dumps(peliculas, indent=4, ensure_ascii=False))
+    logger.info("\nResultado:")
+    logger.info(json.dumps(peliculas, indent=4, ensure_ascii=False))
 
-    print("\nEnviando por Telegram...")
+    logger.info("\nEnviando por Telegram...")
     enviar_telegram(formatear_mensaje(peliculas))
-    print("¡Listo!")
+    logger.info("¡Listo!")
 
 
 if __name__ == "__main__":
