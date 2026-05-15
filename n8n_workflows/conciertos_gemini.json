@@ -1,0 +1,190 @@
+{
+  "name": "Agente Conciertos Gemini",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 10
+            }
+          ]
+        }
+      },
+      "id": "trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://datos.madrid.es/egob/catalogo/206974-0-agenda-eventos-culturales-100.json",
+        "options": {}
+      },
+      "id": "http-request",
+      "name": "API Datos Madrid",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        220,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst data = $input.first().json;\nconst events = data['@graph'] || [];\n\nconst today = new Date();\ntoday.setHours(0, 0, 0, 0);\n\nconst concerts = events.filter(e => {\n  const type = e['@type'] || '';\n  const title = e['title'] || '';\n  if (!type.includes('M\u00fasica') && !type.includes('Concierto') && !title.toLowerCase().includes('concierto')) {\n      return false;\n  }\n  if (!e.dtstart) return false;\n  const eventDate = new Date(e.dtstart);\n  return eventDate >= today;\n});\n\nconcerts.sort((a, b) => new Date(a.dtstart) - new Date(b.dtstart));\nconst topConcerts = concerts.slice(0, 10);\nif (topConcerts.length === 0) return [];\n\nlet listaDatos = [];\ntopConcerts.forEach(c => {\n  const date = c.dtstart ? c.dtstart.split(' ')[0] : 'Sin fecha';\n  const time = c.time || 'Sin hora';\n  let location = c['event-location'] || '';\n  if (!location && c.organization && c.organization['organization-name']) {\n      location = c.organization['organization-name'];\n  }\n  if (!location) location = 'Verificar en web oficial';\n  \n  listaDatos.push({\n      titulo: c.title,\n      fecha: date,\n      hora: time,\n      lugar: location\n  });\n});\n\nreturn [{ json: { mensaje: JSON.stringify(listaDatos, null, 2) } }];\n"
+      },
+      "id": "code-filter",
+      "name": "Procesar API Madrid",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={{$env.GEMINI_API_KEY}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"system_instruction\": {\n    \"parts\": [\n      {\n        \"text\": \"Eres un experto en redes sociales. Tu tarea es maquetar la lista de conciertos que te den EXACTAMENTE con este formato para Telegram, sin omitir ning\u00fan asterisco ni salto de l\u00ednea:\\n\\n\ud83c\udfb8 **[T\u00edtulo]** \ud83c\udfa5\\n\ud83d\udcc5 Fecha: [Fecha] | \u23f0 Hora: [Hora]\\n\ud83d\udccd Lugar: [Lugar]\\n\\n---\\n\\nNo a\u00f1adas saludos iniciales. No a\u00f1adas despedidas. Solo pon los conciertos. Aseg\u00farate de cerrar todos los asteriscos ** correctamente para evitar errores de renderizado en Telegram.\"\n      }\n    ]\n  },\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": {{ JSON.stringify($json.mensaje) }}\n        }\n      ]\n    }\n  ]\n}",
+        "options": {
+          "timeout": 120000
+        },
+        "authentication": "none",
+        "sendHeaders": false
+      },
+      "id": "ollama",
+      "name": "Google Gemini",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        880,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst data = $input.first().json;\nlet respuesta_llm = \"Error al obtener datos de Gemini\";\n\nif (data && data.candidates && data.candidates.length > 0 && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts.length > 0) {\n  respuesta_llm = data.candidates[0].content.parts[0].text;\n}\n\nreturn [{\n  json: {\n    mensaje: respuesta_llm\n  }\n}];\n"
+      },
+      "id": "extraer-llm",
+      "name": "Extraer Respuesta LLM",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.BOT_CONCIERTOS_TOKEN }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $env.CHAT_CONCIERTOS_ID }}\",\n  \"text\": {{ JSON.stringify($json.mensaje) }},\n  \"parse_mode\": \"Markdown\"\n}",
+        "options": {}
+      },
+      "id": "telegram",
+      "name": "Enviar Telegram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1320,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "brian.bedoya.2605@gmail.com",
+        "toEmail": "brian.bedoya.2605@gmail.com",
+        "subject": "\ud83c\udfb8 Conciertos de la Semana en Madrid",
+        "text": "={{ $json.mensaje }}",
+        "options": {}
+      },
+      "id": "email",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "API Datos Madrid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Datos Madrid": {
+      "main": [
+        [
+          {
+            "node": "Procesar API Madrid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Procesar API Madrid": {
+      "main": [
+        [
+          {
+            "node": "Google Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraer Respuesta LLM": {
+      "main": [
+        [
+          {
+            "node": "Enviar Telegram",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini": {
+      "main": [
+        [
+          {
+            "node": "Extraer Respuesta LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "f7ab0d62-1234-4000-8000-abcd1234efgh"
+}

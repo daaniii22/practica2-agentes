@@ -54,6 +54,7 @@ Ejemplo de uso:
 import asyncio
 import json
 import re
+import os
 import logging
 import requests
 import argparse
@@ -67,9 +68,11 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # ── Configuración ─────────────────────────────────────────────────────────────
+# Los tokens se leen de variables de entorno para no exponer credenciales en el código.
+# Se pueden definir en un fichero .env o pasarlas directamente al contenedor Docker.
 
-BOT_TOKEN = "8771613781:AAFsfj0JRy6dXydtfj4yEJbtUcdCRdabc68"
-CHAT_ID = "-5191815456"
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
+CHAT_ID = os.environ.get("CHAT_ID", "")
 
 URL_CARTELERA = "https://www.ecartelera.com/cines/0,30,1.html"
 

@@ -1,0 +1,62 @@
+# Docker Compose para la parte opcional
+services:
+  # ── n8n: orquestador de workflows ──────────────────────────────────────────
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    ports:
+      - "5678:5678"
+    # command: start --tunnel
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=false
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+      - N8N_ENCRYPTION_KEY=supersecretkey_12345
+      - N8N_ENV_VARS_IN_ALLOWED_EXPRESSIONS=BOT_TOKEN,CHAT_ID,BOT_CONCIERTOS_TOKEN,CHAT_CONCIERTOS_ID,OPENAI_API_KEY,GEMINI_API_KEY
+      # Variables que el workflow usa vía $env.BOT_TOKEN / $env.CHAT_ID
+      - BOT_TOKEN=${BOT_TOKEN}
+      - CHAT_ID=${CHAT_ID}
+      - BOT_CONCIERTOS_TOKEN=${BOT_CONCIERTOS_TOKEN}
+      - CHAT_CONCIERTOS_ID=${CHAT_CONCIERTOS_ID}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      - scrapper
+    networks:
+      - agentes
+
+  poller:
+    image: python:3.10-alpine
+    container_name: telegram_poller
+    command: sh -c "pip install requests && python -u /app/poller.py"
+    volumes:
+      - ./poller.py:/app/poller.py
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+    depends_on:
+      - n8n
+    networks:
+      - agentes
+
+  # ── Scrapper: API REST con FastAPI + Playwright ────────────────────────────
+  # Expone POST /cartelera que n8n llama para obtener la cartelera filtrada.
+  # Reutiliza el código existente de scrapper.py y cartelera.py.
+  scrapper:
+    build:
+      context: .
+      dockerfile: Dockerfile.scrapper
+    container_name: scrapper
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    networks:
+      - agentes
+
+volumes:
+  n8n_data:
+
+networks:
+  agentes:
+    driver: bridge

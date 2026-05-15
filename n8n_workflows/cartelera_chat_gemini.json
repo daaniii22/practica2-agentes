@@ -1,0 +1,127 @@
+{
+  "name": "Cartelera Chat Interactivo (Gemini)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chat",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "trigger-webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [0, 200],
+      "webhookId": "chat-webhook-1234"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://scrapper:8000/cartelera",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": []
+        },
+        "options": {}
+      },
+      "id": "http-scrapper",
+      "name": "Obtener Cartelera",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [250, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={{$env.GEMINI_API_KEY}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ system_instruction: { parts: [{ text: \"Eres un simpático acomodador de cine. Un usuario te va a hacer una pregunta sobre las películas disponibles. Debes responderle de forma muy amigable, usando emojis, y basándote ÚNICAMENTE en los datos de la cartelera que te pasamos. Si pregunta algo que no está en la cartelera, dile que lamentablemente esa película no se proyecta hoy.\" }] }, contents: [{ parts: [{ text: \"PREGUNTA DEL USUARIO:\\n\" + $('Webhook').item.json.body.message.text + \"\\n\\nCARTELERA ACTUAL:\\n\" + JSON.stringify($json.peliculas) }] }] }) }}",
+        "options": {}
+      },
+      "id": "http-gemini",
+      "name": "Gemini Chat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [500, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nlet respuesta = \"Lo siento, he tenido un problema procesando tu pregunta.\";\nif (data && data.candidates && data.candidates.length > 0 && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts.length > 0) {\n  respuesta = data.candidates[0].content.parts[0].text;\n}\nreturn [{ json: { mensaje: respuesta, chat_id: $('Webhook').item.json.body.message.chat.id } }];"
+      },
+      "id": "code-extract",
+      "name": "Extraer Respuesta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [750, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.BOT_TOKEN }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $json.chat_id }}\",\n  \"text\": {{ JSON.stringify($json.mensaje) }},\n  \"parse_mode\": \"Markdown\"\n}",
+        "options": {}
+      },
+      "id": "http-telegram",
+      "name": "Enviar Respuesta Telegram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1000,
+        200
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Obtener Cartelera",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Cartelera": {
+      "main": [
+        [
+          {
+            "node": "Gemini Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Chat": {
+      "main": [
+        [
+          {
+            "node": "Extraer Respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraer Respuesta": {
+      "main": [
+        [
+          {
+            "node": "Enviar Respuesta Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "chat-bot-uuid"
+}

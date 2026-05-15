@@ -1,0 +1,35 @@
+# Usamos la imagen base de AWS Lambda que ya sabemos que descarga bien
+# (la de python:3.12-slim daba timeout en Docker Hub).
+FROM public.ecr.aws/lambda/python:3.12
+
+WORKDIR /app
+
+# Instalar dependencias del sistema para Chromium
+RUN dnf install -y \
+    atk cups-libs gtk3 libXcomposite libXcursor libXdamage libXext libXi libXrandr libXScrnSaver libXtst pango alsa-lib at-spi2-atk libdrm libgbm nss \
+    && dnf clean all
+
+# Dependencias de Python
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir fastapi uvicorn
+
+# Playwright + Chromium
+# Instalamos solo el binario porque las librerías del OS ya las instalamos con dnf
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN playwright install chromium
+
+# Código de la aplicación
+COPY scrapper.py .
+COPY cartelera.py .
+COPY server.py .
+
+EXPOSE 8000
+
+# Desactivamos el ENTRYPOINT de Lambda para que se ejecute uvicorn directamente
+ENTRYPOINT []
+
+# uvicorn sirve la API FastAPI.
+# --timeout-keep-alive 120 evita que conexiones largas (el scrapper puede
+# tardar ~60s en procesar varias películas) se corten prematuramente.
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000", "--timeout-keep-alive", "120"]

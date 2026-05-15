@@ -1,0 +1,244 @@
+{
+  "name": "Cartelera Semanal + Guardarra\u00edl",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "a1b2c3d4-1111-4aaa-aaaa-111111111111",
+      "name": "Cada Lunes 9:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://scrapper:8000/cartelera",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": []
+        },
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "a1b2c3d4-2222-4bbb-bbbb-222222222222",
+      "name": "Obtener Cartelera",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-1",
+              "leftValue": "={{ $json.total }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "a1b2c3d4-3333-4ccc-cccc-333333333333",
+      "name": "\u00bfHay pel\u00edculas?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Formateamos la lista de pel\u00edculas en grupos para no superar el l\u00edmite de Telegram\nconst peliculas = $input.first().json.peliculas;\nconst items = [];\nconst BATCH_SIZE = 4;\n\nfor (let i = 0; i < peliculas.length; i += BATCH_SIZE) {\n  const batch = peliculas.slice(i, i + BATCH_SIZE);\n  let lineas = [];\n  \n  if (i === 0) {\n    lineas.push(`\ud83c\udfac *Cartelera de Madrid \u2014 Esta semana* (Parte ${i/BATCH_SIZE + 1})\\n`);\n  } else {\n    lineas.push(`\ud83c\udfac *Cartelera de Madrid* (Parte ${i/BATCH_SIZE + 1})\\n`);\n  }\n  \n  for (const p of batch) {\n    lineas.push(\n      `*${p.titulo}*\\n` +\n      `  \ud83c\udfad G\u00e9nero: ${p.genero}\\n` +\n      `  \u2b50 Nota: ${p.nota}/10 (${p.votos} votos)\\n` +\n      `  \ud83c\udfac Director: ${p.director}\\n` +\n      `  \u23f1 Duraci\u00f3n: ${p.duracion}\\n` +\n      `  \ud83d\udcdd ${p.sinopsis}\\n`\n    );\n  }\n  \n  items.push({ json: { mensaje: lineas.join('\\n\\n') } });\n}\n\nreturn items;"
+      },
+      "id": "a1b2c3d4-4444-4ddd-dddd-444444444444",
+      "name": "Formatear Mensaje",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        750,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={{$env.GEMINI_API_KEY}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"system_instruction\": {\n    \"parts\": [\n      {\n        \"text\": \"Eres un guardarra\u00edl de contenido. Tu trabajo es revisar un mensaje con recomendaciones de pel\u00edculas que se va a enviar a usuarios por Telegram. Debes verificar que: 1) No contiene spoilers evidentes en las sinopsis, 2) El tono es profesional y amigable, 3) La informaci\u00f3n est\u00e1 bien estructurada y es legible. Si todo est\u00e1 correcto, devuelve el mensaje tal cual. Responde SOLO con el mensaje final corregido, sin explicaciones ni comentarios adicionales. Mant\u00e9n el formato Markdown con emojis.\"\n      }\n    ]\n  },\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": {{ JSON.stringify($json.mensaje) }}\n        }\n      ]\n    }\n  ]\n}",
+        "options": {
+          "timeout": 120000
+        },
+        "authentication": "none"
+      },
+      "id": "a1b2c3d4-5555-4eee-eeee-555555555555",
+      "name": "Google Gemini",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1000,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst resultados = [];\n\nfor (const item of items) {\n  let mensajeFinal;\n  try {\n    const data = item.json;\n    if (data && data.candidates && data.candidates.length > 0 && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts.length > 0) {\n      mensajeFinal = data.candidates[0].content.parts[0].text;\n    } else {\n      mensajeFinal = \"Error extrayendo datos de Gemini.\";\n    }\n  } catch (e) {\n    mensajeFinal = \"Error procesando esta parte del mensaje con el Guardarra\u00edl.\";\n  }\n  resultados.push({ json: { mensaje: mensajeFinal } });\n}\n\nreturn resultados;"
+      },
+      "id": "a1b2c3d4-6666-4fff-ffff-666666666666",
+      "name": "Extraer Respuesta Guardarra\u00edl",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1250,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.BOT_TOKEN }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $env.CHAT_ID }}\",\n  \"text\": {{ JSON.stringify($json.mensaje) }},\n  \"parse_mode\": \"Markdown\"\n}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-7777-4aab-aabb-777777777777",
+      "name": "Enviar Telegram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1500,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.BOT_TOKEN }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $env.CHAT_ID }}\",\n  \"text\": \"\ud83c\udfac *Cartelera de Madrid*\\n\\nNo hay pel\u00edculas que cumplan tu perfil esta semana.\",\n  \"parse_mode\": \"Markdown\"\n}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-8888-4bbc-bbcc-888888888888",
+      "name": "Sin Pel\u00edculas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        750,
+        450
+      ]
+    }
+  ],
+  "connections": {
+    "Cada Lunes 9:00": {
+      "main": [
+        [
+          {
+            "node": "Obtener Cartelera",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Cartelera": {
+      "main": [
+        [
+          {
+            "node": "\u00bfHay pel\u00edculas?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "\u00bfHay pel\u00edculas?": {
+      "main": [
+        [
+          {
+            "node": "Formatear Mensaje",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sin Pel\u00edculas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Mensaje": {
+      "main": [
+        [
+          {
+            "node": "Google Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraer Respuesta Guardarra\u00edl": {
+      "main": [
+        [
+          {
+            "node": "Enviar Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini": {
+      "main": [
+        [
+          {
+            "node": "Extraer Respuesta Guardarra\u00edl",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [],
+  "pinData": {}
+}
