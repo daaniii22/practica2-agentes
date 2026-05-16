@@ -17,12 +17,8 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "http://scrapper:8000/cartelera",
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": []
-        },
+        "method": "GET",
+        "url": "http://scrapper:8000/get_cache",
         "options": {}
       },
       "id": "http-scrapper",
@@ -37,7 +33,7 @@
         "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={{$env.GEMINI_API_KEY}}",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ system_instruction: { parts: [{ text: \"Eres un simpático acomodador de cine. Un usuario te va a hacer una pregunta sobre las películas disponibles. Debes responderle de forma muy amigable, usando emojis, y basándote ÚNICAMENTE en los datos de la cartelera que te pasamos. Si pregunta algo que no está en la cartelera, dile que lamentablemente esa película no se proyecta hoy.\" }] }, contents: [{ parts: [{ text: \"PREGUNTA DEL USUARIO:\\n\" + $('Webhook').item.json.body.message.text + \"\\n\\nCARTELERA ACTUAL:\\n\" + JSON.stringify($json.peliculas) }] }] }) }}",
+        "jsonBody": "={{ JSON.stringify({ system_instruction: { parts: [{ text: \"Eres un simpático acomodador de cine. Un usuario te va a hacer una pregunta sobre las películas disponibles. Debes responderle de forma muy amigable, usando emojis, y basándote ÚNICAMENTE en los datos de la cartelera que te pasamos. Si pregunta algo que no está en la cartelera, dile que lamentablemente esa película no se proyecta hoy.\" }] }, contents: [{ parts: [{ text: \"PREGUNTA DEL USUARIO:\\n\" + $('Webhook').item.json.body.message.text + \"\\n\\nCARTELERA ACTUAL:\\n\" + JSON.stringify($json) }] }] }) }}",
         "options": {}
       },
       "id": "http-gemini",

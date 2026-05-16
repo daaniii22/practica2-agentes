@@ -84,8 +84,11 @@ Orquestación de la cartelera y de conciertos con **n8n** y validación/procesam
 ### Decisiones de Diseño y Problemas Resueltos
 
 * **Uso de FastAPI**: En vez de ejecutar scripts de Python a través de nodos SSH, se construyó un pequeño servidor FastAPI (`server.py`). Esto permite a n8n interactuar con el código Python a través de llamadas HTTP limpias.
+* **Caché en Memoria (Optimización de Rendimiento)**: Para que el bot de chat responda de forma instantánea, se implementó una capa de caché en la memoria RAM del servidor `scrapper`. El workflow semanal guarda la cartelera procesada mediante un `POST /set_cache`, y el bot de chat la recupera mediante un `GET /get_cache`. Esto elimina la necesidad de raspar la web en cada interacción y evita problemas de permisos de escritura en disco.
+* **Control de Quotas (Gemini Rate Limiting)**: Para cumplir con los límites de la API gratuita de Gemini (15 RPM / 5 burst), el workflow semanal procesa las películas en lotes de 7 y aplica un intervalo de espera de 20 segundos entre peticiones. Esto garantiza que el envío de la cartelera sea robusto y no se bloquee por "Too Many Requests".
 * **Migración a la Nube (Gemini)**: Inicialmente se usó Ollama local. Sin embargo, se migró a la API de Gemini para delegar el procesamiento a la nube, ganando estabilidad (0 crasheos), inteligencia para formatear, y la posibilidad de crear bots conversacionales súper rápidos.
 * **Telegram Poller Local**: En lugar de exponer n8n a internet mediante webhooks públicos inestables (como localtunnel o ngrok), se desarrolló un servicio en Python (`poller.py`) que usa Long Polling para escuchar a Telegram y reenviar los mensajes al webhook interno de n8n. Esto hace que el bot funcione 100% en local sin problemas de red o bloqueos.
+* **Supergrupos de Telegram**: El sistema detecta y maneja el cambio de IDs cuando un grupo de Telegram se convierte en Supergrupo, asegurando que las notificaciones semanales lleguen al destino correcto.
 
 ### Requisitos
 

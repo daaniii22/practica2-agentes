@@ -43,10 +43,29 @@ class CarteleraRequest(BaseModel):
     limite: int | None = None
 
 
+# Caché en memoria para evitar re-escrapear constantemente
+CACHE = {"peliculas": [], "total": 0}
+
+
 @app.get("/health")
 def health():
     """Healthcheck para Docker y n8n."""
     return {"status": "ok"}
+
+
+@app.post("/set_cache")
+def set_cache(data: dict):
+    """Guarda datos en la caché del servidor."""
+    global CACHE
+    CACHE = data
+    logger.info("Caché actualizada con %s películas", CACHE.get("total", 0))
+    return {"status": "success"}
+
+
+@app.get("/get_cache")
+def get_cache():
+    """Devuelve los datos guardados en la caché."""
+    return CACHE
 
 
 @app.post("/cartelera")
