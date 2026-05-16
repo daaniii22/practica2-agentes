@@ -78,7 +78,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Formateamos la lista de películas en grupos para no superar el límite de Telegram\nconst peliculas = $input.first().json.peliculas;\nconst items = [];\nconst BATCH_SIZE = 7;\n\nfor (let i = 0; i < peliculas.length; i += BATCH_SIZE) {\n  const batch = peliculas.slice(i, i + BATCH_SIZE);\n  let lineas = [];\n  \n  if (i === 0) {\n    lineas.push(`🎬 *Cartelera de Madrid — Esta semana* (Parte ${i/BATCH_SIZE + 1})\\n`);\n  } else {\n    lineas.push(`🎬 *Cartelera de Madrid* (Parte ${i/BATCH_SIZE + 1})\\n`);\n  }\n  \n  for (const p of batch) {\n    lineas.push(\n      `*${p.titulo}*\\n` +\n      `  🎭 Género: ${p.genero}\\n` +\n      `  ⭐ Nota: ${p.nota}/10 (${p.votos} votos)\\n` +\n      `  🎬 Director: ${p.director}\\n` +\n      `  ⏱️ Duración: ${p.duracion}\\n` +\n      `  📝 ${p.sinopsis}\\n`\n    );\n  }\n  \n  items.push({ json: { mensaje: lineas.join('\\n\\n') } });\n}\n\nreturn items;"
+        "jsCode": "// Formateamos toda la cartelera en un único mensaje gigante para Gemini\nconst peliculas = $input.first().json.peliculas;\nlet lineas = [];\n\nlineas.push(`🎬 *Cartelera de Madrid — Esta semana*\\n`);\n\nfor (const p of peliculas) {\n  lineas.push(\n    `*${p.titulo}*\\n` +\n    `  🎭 Género: ${p.genero}\\n` +\n    `  ⭐ Nota: ${p.nota}/10 (${p.votos} votos)\\n` +\n    `  🎬 Director: ${p.director}\\n` +\n    `  ⏱️ Duración: ${p.duracion}\\n` +\n    `  📝 ${p.sinopsis}\\n`\n  );\n}\n\nreturn [{ json: { mensaje: lineas.join('\\n\\n') } }];"
       },
       "id": "a1b2c3d4-4444-4ddd-dddd-444444444444",
       "name": "Formatear Mensaje",
@@ -97,13 +97,7 @@
         "specifyBody": "json",
         "jsonBody": "={\n  \"system_instruction\": {\n    \"parts\": [\n      {\n        \"text\": \"Eres un guardarra\u00edl de contenido. Tu trabajo es revisar un mensaje con recomendaciones de pel\u00edculas que se va a enviar a usuarios por Telegram. Debes verificar que: 1) No contiene spoilers evidentes en las sinopsis, 2) El tono es profesional y amigable, 3) La informaci\u00f3n est\u00e1 bien estructurada y es legible. Si todo est\u00e1 correcto, devuelve el mensaje tal cual. Responde SOLO con el mensaje final corregido, sin explicaciones ni comentarios adicionales. Mant\u00e9n el formato Markdown con emojis.\"\n      }\n    ]\n  },\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": {{ JSON.stringify($json.mensaje) }}\n        }\n      ]\n    }\n  ]\n}",
         "options": {
-          "timeout": 120000,
-          "batching": {
-            "batch": {
-              "batchSize": 1,
-              "batchInterval": 20000
-            }
-          }
+          "timeout": 120000
         },
         "authentication": "none"
       },
@@ -118,7 +112,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const items = $input.all();\nconst resultados = [];\n\nfor (const item of items) {\n  let mensajeFinal;\n  try {\n    const data = item.json;\n    if (data && data.candidates && data.candidates.length > 0 && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts.length > 0) {\n      mensajeFinal = data.candidates[0].content.parts[0].text;\n    } else {\n      mensajeFinal = \"Error extrayendo datos de Gemini.\";\n    }\n  } catch (e) {\n    mensajeFinal = \"Error procesando esta parte del mensaje con el Guardarra\u00edl.\";\n  }\n  resultados.push({ json: { mensaje: mensajeFinal } });\n}\n\nreturn resultados;"
+        "jsCode": "const item = $input.first();\nlet textoCompleto;\n\ntry {\n  const data = item.json;\n  if (data && data.candidates && data.candidates.length > 0) {\n    textoCompleto = data.candidates[0].content.parts[0].text;\n  } else {\n    return [{ json: { mensaje: \"Error extrayendo datos de Gemini.\" } }];\n  }\n} catch (e) {\n  return [{ json: { mensaje: \"Error procesando la respuesta de Gemini.\" } }];\n}\n\n// Dividimos el texto en trozos de máximo 4000 caracteres para Telegram\nconst MAX_LENGTH = 4000;\nconst trozos = [];\nlet posicion = 0;\n\nwhile (posicion < textoCompleto.length) {\n  let fin = posicion + MAX_LENGTH;\n  if (fin < textoCompleto.length) {\n    // Buscamos el último salto de línea para no cortar una película a la mitad\n    const ultimoSalto = textoCompleto.lastIndexOf('\\n', fin);\n    if (ultimoSalto > posicion) {\n      fin = ultimoSalto;\n    }\n  }\n  \n  trozos.push({ json: { mensaje: textoCompleto.substring(posicion, fin).trim() } });\n  posicion = fin;\n}\n\nreturn trozos;"
       },
       "id": "a1b2c3d4-6666-4fff-ffff-666666666666",
       "name": "Extraer Respuesta Guardarra\u00edl",
