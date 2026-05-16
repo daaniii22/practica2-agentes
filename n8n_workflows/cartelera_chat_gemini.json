@@ -42,23 +42,23 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.openai.com/v1/chat/completions",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $env.OPENAI_API_KEY }}"
+              "value": "=Bearer {{ $env.GROQ_API_KEY }}"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: \"gpt-4o-mini\", messages: [{ role: \"system\", content: \"Eres un simpático acomodador de cine. Responde de forma muy amigable basándote en la cartelera que te pasamos.\" }, { role: \"user\", content: \"PREGUNTA: \" + $('Webhook').item.json.body.message.text + \"\\n\\nCARTELERA: \" + JSON.stringify($json) }] }) }}",
+        "jsonBody": "={{ JSON.stringify({ model: \"llama3-8b-8192\", messages: [{ role: \"system\", content: \"Eres un simpático acomodador de cine. Responde de forma muy amigable basándote en la cartelera que te pasamos.\" }, { role: \"user\", content: \"PREGUNTA: \" + $('Webhook').item.json.body.message.text + \"\\n\\nCARTELERA: \" + JSON.stringify($json) }] }) }}",
         "options": {}
       },
-      "id": "openai-chat",
-      "name": "OpenAI Chat",
+      "id": "groq-chat",
+      "name": "Groq Chat",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
       "position": [

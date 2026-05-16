@@ -92,23 +92,23 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.openai.com/v1/chat/completions",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $env.OPENAI_API_KEY }}"
+              "value": "=Bearer {{ $env.GROQ_API_KEY }}"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"gpt-4o-mini\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Eres un guardarra\u00edl de contenido. Tu trabajo es revisar un mensaje con recomendaciones de pel\u00edculas que se va a enviar a usuarios por Telegram. Debes verificar que: 1) No contiene spoilers evidentes, 2) El tono es profesional y amigable. Responde SOLO con el mensaje final corregido. Mant\u00e9n el Markdown.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.mensaje) }}\n    }\n  ]\n}",
+        "jsonBody": "={\n  \"model\": \"llama3-8b-8192\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Eres un guardarra\u00edl de contenido. Tu trabajo es revisar un mensaje con recomendaciones de pel\u00edculas que se va a enviar a usuarios por Telegram. Debes verificar que: 1) No contiene spoilers evidentes, 2) El tono es profesional y amigable. Responde SOLO con el mensaje final corregido. Mant\u00e9n el Markdown.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.mensaje) }}\n    }\n  ]\n}",
         "options": {}
       },
       "id": "a1b2c3d4-5555-4eee-eeee-555555555555",
-      "name": "OpenAI Guardrail",
+      "name": "Groq Guardrail",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
