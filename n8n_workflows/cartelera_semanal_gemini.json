@@ -92,7 +92,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={{$env.GEMINI_API_KEY}}",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={{$env.GEMINI_API_KEY}}",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"system_instruction\": {\n    \"parts\": [\n      {\n        \"text\": \"Eres un guardarra\u00edl de contenido. Tu trabajo es revisar un mensaje con recomendaciones de pel\u00edculas que se va a enviar a usuarios por Telegram. Debes verificar que: 1) No contiene spoilers evidentes en las sinopsis, 2) El tono es profesional y amigable, 3) La informaci\u00f3n est\u00e1 bien estructurada y es legible. Si todo est\u00e1 correcto, devuelve el mensaje tal cual. Responde SOLO con el mensaje final corregido, sin explicaciones ni comentarios adicionales. Mant\u00e9n el formato Markdown con emojis.\"\n      }\n    ]\n  },\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": {{ JSON.stringify($json.mensaje) }}\n        }\n      ]\n    }\n  ]\n}",
@@ -161,21 +161,49 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "http://scrapper:8000/set_cache",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json) }}",
-        "options": {}
+        "operation": "upload",
+        "bucketName": "cartelera",
+        "fileName": "cartelera_latest.json",
+        "fileContent": "={{ JSON.stringify($json) }}",
+        "additionalFields": {}
       },
-      "id": "write-file-cache",
-      "name": "Actualizar Caché",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "id": "upload-latest-s3",
+      "name": "S3: Guardar Latest",
+      "type": "n8n-nodes-base.awsS3",
+      "typeVersion": 1,
       "position": [
         500,
         500
-      ]
+      ],
+      "credentials": {
+        "awsS3Api": {
+          "id": "minio-credentials-id",
+          "name": "MinIO Local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "cartelera",
+        "fileName": "={{ 'cartelera_' + $now.format('yyyy_MM_dd') + '.json' }}",
+        "fileContent": "={{ JSON.stringify($json) }}",
+        "additionalFields": {}
+      },
+      "id": "upload-history-s3",
+      "name": "S3: Guardar Historial",
+      "type": "n8n-nodes-base.awsS3",
+      "typeVersion": 1,
+      "position": [
+        500,
+        650
+      ],
+      "credentials": {
+        "awsS3Api": {
+          "id": "minio-credentials-id",
+          "name": "MinIO Local"
+        }
+      }
     }
   ],
   "connections": {
@@ -199,7 +227,12 @@
             "index": 0
           },
           {
-            "node": "Actualizar Caché",
+            "node": "S3: Guardar Latest",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "S3: Guardar Historial",
             "type": "main",
             "index": 0
           }

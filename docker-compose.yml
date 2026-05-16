@@ -12,7 +12,6 @@ services:
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
       - N8N_ENCRYPTION_KEY=supersecretkey_12345
       - N8N_ENV_VARS_IN_ALLOWED_EXPRESSIONS=BOT_TOKEN,CHAT_ID,BOT_CONCIERTOS_TOKEN,CHAT_CONCIERTOS_ID,OPENAI_API_KEY,GEMINI_API_KEY
-      # Variables que el workflow usa vía $env.BOT_TOKEN / $env.CHAT_ID
       - BOT_TOKEN=${BOT_TOKEN}
       - CHAT_ID=${CHAT_ID}
       - BOT_CONCIERTOS_TOKEN=${BOT_CONCIERTOS_TOKEN}
@@ -26,6 +25,7 @@ services:
     networks:
       - agentes
 
+  # ── poller: microservicio para interceptar Telegram Webhooks ────────────────
   poller:
     image: python:3.10-alpine
     container_name: telegram_poller
@@ -40,8 +40,6 @@ services:
       - agentes
 
   # ── Scrapper: API REST con FastAPI + Playwright ────────────────────────────
-  # Expone POST /cartelera que n8n llama para obtener la cartelera filtrada.
-  # Reutiliza el código existente de scrapper.py y cartelera.py.
   scrapper:
     build:
       context: .
@@ -53,6 +51,37 @@ services:
       - .:/app
     env_file:
       - .env
+    networks:
+      - agentes
+
+  # ── MinIO: Almacenamiento S3 Local para la Cartelera ───────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    ports:
+      - "9000:9000" # API
+      - "9001:9001" # Consola
+    environment:
+      - MINIO_ROOT_USER=admin
+      - MINIO_ROOT_PASSWORD=supersecret
+    volumes:
+      - ./data/minio:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - agentes
+
+  # ── ComfyUI: Generación de Canciones con ACE-Step ──────────────────────────
+  comfyui:
+    image: yanwk/comfyui-boot:cpu
+    container_name: comfyui
+    ports:
+      - "8188:8188"
+    volumes:
+      - ./data/comfyui/models:/root/ComfyUI/models
+      - ./data/comfyui/output:/root/ComfyUI/output
+      - ./data/comfyui/custom_nodes:/root/ComfyUI/custom_nodes
+    environment:
+      - CLI_ARGS=--listen --port 8188 --cpu
     networks:
       - agentes
 
