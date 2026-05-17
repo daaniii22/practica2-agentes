@@ -1,0 +1,104 @@
+{
+  "last_node_id": 3,
+  "last_link_id": 2,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "CLIPTextEncode",
+      "pos": [100, 150],
+      "size": {
+        "0": 400,
+        "1": 200
+      },
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [1],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "NodeConfigs": {
+          "showOutputText": true
+        }
+      },
+      "widgets_values": [
+        "epic synthwave, retro 80s movie soundtrack, dramatic electronic beat"
+      ]
+    },
+    {
+      "id": 3,
+      "type": "ACE-Step-Generator",
+      "pos": [550, 150],
+      "size": {
+        "0": 350,
+        "1": 220
+      },
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "link": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [2],
+          "slot_index": 0
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "acestep_v1_3.5b.safetensors",
+        10.0,
+        4.5,
+        20,
+        123456789,
+        "randomize",
+        ""
+      ]
+    },
+    {
+      "id": 2,
+      "type": "SaveAudio",
+      "pos": [950, 150],
+      "size": {
+        "0": 300,
+        "1": 150
+      },
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 2
+        }
+      ],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "n8n_soundtrack"
+      ]
+    }
+  ],
+  "links": [
+    [1, 1, 0, 3, 0, "CONDITIONING"],
+    [2, 3, 0, 2, 0, "AUDIO"]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {},
+  "version": 0.4
+}
