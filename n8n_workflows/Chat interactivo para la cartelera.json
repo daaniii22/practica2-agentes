@@ -209,7 +209,9 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"client_id\": \"n8n_client\",\n  \"prompt\": {\n    \"1\": {\n      \"inputs\": {\n        \"text\": \"{{ $json.style }}\"\n      },\n      \"class_type\": \"CLIPTextEncode\"\n    },\n    \"2\": {\n      \"inputs\": {\n        \"filename_prefix\": \"n8n_soundtrack\",\n        \"audio\": [\"3\", 0]\n      },\n      \"class_type\": \"SaveAudio\"\n    },\n    \"3\": {\n      \"inputs\": {\n        \"text\": \"{{ $json.style }}\",\n        \"duration\": 10\n      },\n      \"class_type\": \"ACE-Step-Generator\"\n    }\n  }\n}",
-        "options": {}
+        "options": {
+          "neverThrowError": true
+        }
       },
       "id": "comfy-api",
       "name": "ComfyUI Queue Prompt",
