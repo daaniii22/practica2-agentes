@@ -1,18 +1,18 @@
-# Agente Inteligente de Cartelera y Conciertos con n8n y Groq
+# 🎬 Agente Inteligente de Cartelera y Conciertos con n8n, Groq, S3 y ComfyUI (MusicGen-HF)
 
-Este repositorio contiene una práctica avanzada de **Sistemas Inteligentes** para automatizar la extracción, análisis y distribución inteligente de la cartelera de cine de Madrid y eventos musicales/conciertos.
+Este repositorio contiene una práctica avanzada de **Sistemas Inteligentes** (IA Agéntica) para la automatización, extracción, análisis, maquetación y distribución de la cartelera de cine de Madrid y eventos musicales/conciertos.
 
-El sistema orquesta múltiples microservicios locales en Docker mediante **n8n**, delegando la lógica a **Llama 3.1** y almacenando el histórico de ejecuciones en un bucket **S3 local (MinIO)** como única fuente de verdad. Además, incluye la infraestructura de **ComfyUI** para futuras generaciones multimedia.
+El sistema orquesta múltiples microservicios locales en Docker mediante **n8n**, delegando la lógica cognitiva a **Llama 3.1** (a través de **Groq** para máxima velocidad) y almacenando el histórico de ejecuciones en un bucket **S3 local (MinIO)**. Incorpora además **ComfyUI** para la generación dinámica de bandas sonoras personalizadas en tiempo real mediante **HuggingFace MusicGen**.
 
 ---
 
-## Arquitectura del Sistema
+## 🏗️ Arquitectura Completa del Stack
 
-El stack tecnológico está completamente contenedorizado y estructurado de forma modular y desacoplada:
+El ecosistema está completamente contenedorizado en Docker, desacoplado y optimizado para ejecutarse localmente:
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                                DOCKER COMPOSESTACK                                     │
+│                                DOCKER COMPOSE STACK                                    │
 │                                                                                        │
 │  ┌──────────────┐     HTTP (REST API)     ┌────────────────┐                           │
 │  │   scrapper   │◄────────────────────────│      n8n       │ (Orquestador Principal)   │
@@ -20,23 +20,25 @@ El stack tecnológico está completamente contenedorizado y estructurado de form
 │  │  Playwright) │                         │  - Workflows   │                           │
 │  └──────────────┘                         │  - Triggers    │                           │
 │                                           │  - Lógica      │                           │
-│  ┌──────────────┐     S3 API (Upload)     │                │                           │
+│  ┌──────────────┐     S3 API (Upload)     │  - user: root  │                           │
 │  │    MinIO     │◄────────────────────────│                │                           │
 │  │ (S3 Storage) │                         │                │                           │
 │  └──────────────┘                         │                │                           │
 │                                           │                │                           │
-│  ┌──────────────┐   HTTP (Chat Query)     │                │                           │
+│  ┌──────────────┐     HTTP (API Prompt)   │                │                           │
 │  │   comfyui    │◄────────────────────────│                │                           │
-│  │              │                         │                │                           │
+│  │ (MusicGen)   │                         │                │                           │
 │  └──────────────┘                         └────────────────┘                           │
-│                                            ▲    ▲    │                                 │
-│                                            │    │    │ HTTP (Enviar Telegram)          │
-│                      Telegram Webhook      │    │    ▼                                 │
-│                      (Redirección Local)   │  ┌──────────────────┐                     │
-│                                            │  │   Telegram Bot   │                     │
-│  ┌──────────────┐                          │  │     (Chat /      │                     │
-│  │    poller    │──────────────────────────┘  │  Notificaciones) │                     │
-│  │   (python)   │◄────────────────────────────┴──────────────────┘                     │
+│         │                                          ▲    ▲    │                         │
+│         │                                          │    │    │ HTTP (Enviar Telegram)  │
+│         │ Escritura Directa en Volumen Compartido  │    │    ▼                         │
+│         └───────────────► [ ./data/comfyui/output ] │  ┌──────────────────┐            │
+│                           (Montado en n8n como     │  │   Telegram Bot   │            │
+│                            /root/.n8n-files) ──────┘  │     (Chat /      │            │
+│                                                       │  Notificaciones) │            │
+│  ┌──────────────┐             Telegram Webhook        │                  │            │
+│  │    poller    │─────────────────────────────────────┴──────────────────┘            │
+│  │   (python)   │◄────────────────────────────────────┘                               │
 │  └──────────────┘                Long Polling (getUpdates)                             │
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -45,55 +47,74 @@ El stack tecnológico está completamente contenedorizado y estructurado de form
 
 | Componente | Imagen / Tecnología | Puerto | Descripción |
 | :--- | :--- | :--- | :--- |
-| **n8n** | `n8nio/n8n:latest` | `5678` | Orquestador visual de flujos de trabajo e integraciones. |
-| **Scrapper** | `FastAPI + Playwright` | `8000` | Microservicio que raspa IMDb y eCartelera bajo demanda. |
-| **MinIO** | `minio/minio:latest` | `9000` / `9001` | Almacenamiento S3 local. Actúa como base de datos persistente para la cartelera. |
-| **ComfyUI** | `yanwk/comfyui-boot:cpu` | `8188` | Interfaz estable de generación por IA. |
-| **Telegram Poller** | `python:3.10-alpine` | *Interno* | Escucha mensajes mediante Long Polling y los inyecta al webhook local de n8n. |
+| **n8n** | `n8nio/n8n:latest` | `5678` | Orquestador de flujos de trabajo. Ejecutado como `root` para interactuar con el sistema de archivos del host. |
+| **Scrapper** | `FastAPI + Playwright` | `8000` | Microservicio de raspado bajo demanda para IMDb y eCartelera. |
+| **MinIO** | `minio/minio:latest` | `9000` / `9001` | Almacenamiento S3 local. Actúa como base de datos persistente e histórico semanal de la cartelera. |
+| **ComfyUI** | `yanwk/comfyui-boot:cpu` | `8188` | Interfaz estable de IA configurada en modo CPU de bajo consumo y optimizada con FP32 (`--force-fp32`) para MusicGen. |
+| **Telegram Poller** | `python:3.10-alpine` | *Interno* | Escucha mensajes mediante Long Polling de Telegram y los reenvía al webhook de n8n. |
 
 ---
 
 ## ⚡ Workflows n8n Implementados
 
-Los workflows se encuentran en la carpeta `n8n_workflows/` listos para ser importados:
+Los workflows se encuentran en la carpeta `n8n_workflows/` listos para ser importados en tu instancia local de n8n:
 
-### 1. 📅 [Cartelera Semanal]
+### 1. 📅 [Cartelera Semanal](file:///media/brian/ssd_extra/CDIA%203%C2%BA/2%C2%BA%20Cuatrimestre/Sistemas%20Inteligentes/practica2-agentes/n8n_workflows/Cartelera%20Semanal.json)
 *   **Trigger:** Cada lunes a las 9:00 AM (o manual).
 *   **Funcionamiento:** 
-    1. Llama al microservicio `scrapper` para extraer las películas en cartelera de Madrid filtradas por el perfil del usuario.
-    2. Si hay películas, formatea un mensaje legible y lo envía a **Groq (Llama 3.1 8b)** para verificar que no haya spoilers y corregir la gramática/estructura.
-    3. Envía el mensaje segmentado automáticamente (para cumplir el límite de 4000 caracteres de Telegram) al canal principal.
-    4. **Persistencia S3:** Guarda simultáneamente el JSON en MinIO en dos rutas:
-        *   `cartelera_latest.json`: Sobreescribe siempre el último estado para consumo inmediato del chat.
-        *   `cartelera_YYYY_MM_DD.json`: Histórico fechado semanal para auditoría y evolución temporal.
+    1. Llama al microservicio `scrapper` para extraer las películas de Madrid filtradas por el perfil del usuario.
+    2. Valida la cartelera con **Groq (Llama 3.1 8b)** para verificar que no haya spoilers y corregir la gramática.
+    3. Envía el mensaje segmentado automáticamente a Telegram.
+    4. **Persistencia S3:** Guarda en MinIO `cartelera_latest.json` (consumo inmediato) y `cartelera_YYYY_MM_DD.json` (histórico semanal).
 
-### 2. 💬 [Chat Interactivo para la Cartelera]
-*   **Trigger:** Al recibir cualquier pregunta o comando por el bot de Telegram.
-*   **Funcionamiento:**
-    1. Descarga el JSON `cartelera_latest.json` del bucket de MinIO en tiempo real.
-    2. Procesa los datos binarios a un formato estructurado en JavaScript.
-    3. Groq procesa la pregunta del usuario utilizando el JSON de la cartelera, actuando como un simpático acomodador de cine.
-    4. Devuelve la respuesta al chat de Telegram correspondiente de forma instantánea y sin consumir peticiones API de raspado repetitivas.
+### 2. 💬 [Chat Interactivo para la Cartelera](file:///media/brian/ssd_extra/CDIA%203%C2%BA/2%C2%BA%20Cuatrimestre/Sistemas%20Inteligentes/practica2-agentes/n8n_workflows/Chat%20interactivo%20para%20la%20cartelera.json)
+*   **Trigger:** Al recibir cualquier comando o mensaje por el bot de Telegram.
+*   **Funcionamiento con Agente de Generación de Banda Sonora:**
+    1. Descarga en caliente la cartelera desde MinIO S3.
+    2. **Clasificador de Intención:** Un nodo de **Groq** determina si la intención es de `"chat"` (consulta de cartelera) o de `"soundtrack"` (petición musical).
+    3. **Rama Chat:** Responde amigablemente como un acomodador de cine.
+    4. **Rama Soundtrack (ComfyUI Real-Time Pipeline):**
+        *   Groq crea un prompt de estilo musical según el género de la película elegida.
+        *   Llama al endpoint `/prompt` de ComfyUI ejecutando el workflow de **HuggingFace MusicGen**.
+        *   **Wait & Execute Command:** El flujo de n8n hace una pausa de 25 segundos y ejecuta un comando Shell (`ls -t /root/.n8n-files/audio/*.wav | head -n 1`) para encontrar el audio generado.
+        *   **Read file from disk:** Lee el archivo `.wav` directamente del volumen de salida compartido y lo envía de forma multipart al chat del usuario a través del método `sendAudio` de Telegram.
 
-### 3. 🎸 [Agente Conciertos]
-*   **Trigger:** Cada lunes a las 10:00 AM (o manual).
+### 3. 🎸 [Agente Conciertos](file:///media/brian/ssd_extra/CDIA%203%C2%BA/2%C2%BA%20Cuatrimestre/Sistemas%20Inteligentes/practica2-agentes/n8n_workflows/Agente%20Conciertos.json)
+*   **Trigger:** Cada lunes a las 10:00 AM.
 *   **Funcionamiento:**
     1. Obtiene los eventos musicales de la API oficial de datos abiertos del Ayuntamiento de Madrid.
-    2. Filtra por eventos de tipo música/concierto que tengan lugar a partir de hoy y se queda con los 10 más próximos cronológicamente.
-    3. Groq maqueta la lista con formato premium Markdown enriquecido con emojis y sin omitir detalles.
-    4. Envía el resultado simultáneamente a un canal de Telegram de Conciertos y por correo electrónico (SMTP).
+    2. Filtra por eventos musicales del día en adelante (los 10 más próximos).
+    3. Groq maqueta la lista con formato Markdown enriquecido con emojis.
+    4. Envía el resultado al canal de conciertos y por correo electrónico (SMTP).
 
 ---
 
-## Guía de Despliegue Rápido
+## 🛠️ Optimización y Compartición de Volúmenes (ComfyUI ➔ n8n)
+
+> [!IMPORTANT]
+> **El Puente de Volumen Directo:** Para que la banda sonora se envíe de manera instantánea y automática a Telegram sin descargas por red ni latencias, hemos configurado un volumen compartido directo en Docker:
+> 
+> ```yaml
+> # En n8n:
+> volumes:
+>   - ./data/comfyui/output:/root/.n8n-files
+> ```
+> El contenedor de ComfyUI escribe el audio generado en su output local, el cual se refleja al instante en el volumen de n8n. Gracias a que el contenedor de n8n corre bajo `user: "root"`, el flujo de n8n puede ejecutar scripts shell para ubicar el último archivo de audio con un comando simple y leerlo directamente del disco con el nodo `Read/Write Files from Disk`.
+
+> [!TIP]
+> **Inferencia Precisa en CPU (MusicGen-HF):** Para la generación de audio, migramos el flujo a **HuggingFace MusicGen (modelo small)**. Esto permite generar pistas musicales muy agradables y personalizadas a partir de prompts de texto en cuestión de segundos, incluso corriendo en CPU, con un consumo de recursos mínimo e ideal para ordenadores con 8GB de RAM. La bandera `--force-fp32` en el contenedor `comfyui` asegura que las matemáticas del modelo sean limpias en CPU y evita cuelgues o corrupciones de audio.
+
+---
+
+## 🚀 Guía de Despliegue Rápido
 
 ### Requisitos Previos
-*   Docker y Docker Compose instalados.
-*   Un bot de Telegram creado mediante [@BotFather](https://t.me/BotFather) y su respectivo `Token`.
-*   El `Chat ID` de tu usuario o canal (puedes usar bots como `@userinfobot` para obtenerlo).
+*   Docker y Docker Compose.
+*   Un bot de Telegram creado mediante [@BotFather](https://t.me/BotFather) y su respectiva `Token`.
+*   El `Chat ID` de tu usuario/canal.
 
 ### Paso 1: Configurar Variables de Entorno
-Copia la plantilla y edita el fichero `.env` con tus tokens y llaves:
+Copia la plantilla y edita el fichero `.env` con tus tokens y tu API Key de Groq:
 ```bash
 cp .env.example .env
 ```
@@ -127,5 +148,26 @@ docker compose up -d --build
    * **Access Key:** `admin`
    * **Secret Key:** `supersecret`
    * **Endpoint:** `http://minio:9000` (¡importante usar `minio` en lugar de `localhost` ya que corre dentro de Docker!)
-4. **Configurar Credenciales SMTP:** En el nodo `Send Email` del Agente Conciertos, configura tu SMTP de preferencia.
+4. **Configurar Credenciales SMTP:** En el nodo `Send Email` del Agente Conciertos, configura tu SMTP de preferencia (por ejemplo, Gmail con contraseña de aplicación).
 5. Activa los tres flujos (*Active* toggle arriba a la derecha).
+
+---
+
+## 📁 Estructura del Repositorio
+
+```text
+├── docker-compose.yml              # Stack completo (n8n, scrapper, minio, comfyui, poller)
+├── Dockerfile.scrapper             # Configuración del contenedor FastAPI + Playwright
+├── server.py                       # Servidor de API que envuelve scrapper.py para llamadas HTTP
+├── poller.py                       # Reenvía mensajes recibidos por Telegram al webhook de n8n
+├── cartelera.py                    # Script de raspado y filtrado por perfil
+├── scrapper.py                    # Analizador del detalle de películas en IMDb
+├── .env.example                    # Plantilla de variables de entorno para despliegue
+├── n8n_workflows/                  # Ficheros JSON de los workflows para n8n
+│   ├── Cartelera Semanal.json
+│   ├── Chat interactivo para la cartelera.json
+│   └── Agente Conciertos.json
+├── comfyui_workflows/              # Flujo visual de ComfyUI para importación directa
+│   └── comfyUi_MusicGen-HF.json   # Workflow visual de HuggingFace MusicGen (Arrastrar y Soltar)
+└── README.md                       # Documentación técnica
+```

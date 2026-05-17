@@ -8,13 +8,13 @@
         "responseMode": "lastNode",
         "options": {}
       },
-      "id": "c4c03f86-4969-4c9b-b37f-a37e2006993c",
+      "id": "86b24ff3-adf1-495e-bdcc-37b7f445b5ed",
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
       "position": [
-        0,
-        0
+        -864,
+        112
       ],
       "webhookId": "chat-webhook-1234"
     },
@@ -26,14 +26,14 @@
       "type": "n8n-nodes-base.s3",
       "typeVersion": 1,
       "position": [
-        180,
-        0
+        -688,
+        112
       ],
-      "id": "80c09650-ee46-4cdd-84ca-4e6508b347b7",
+      "id": "aa83c710-aa18-49ea-b051-6bf7b7aaa197",
       "name": "Download a file",
       "credentials": {
         "s3": {
-          "id": "st1sNMyibx5gkyoF",
+          "id": "imwabrPsL4mp8Ly6",
           "name": "S3 account"
         }
       }
@@ -45,10 +45,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        340,
-        0
+        -528,
+        112
       ],
-      "id": "8e7fd6f9-a7d4-41de-8ce3-138ddee98601",
+      "id": "facd3669-1468-469a-9cbd-2a4931be5584",
       "name": "Code in JavaScript"
     },
     {
@@ -69,13 +69,13 @@
         "jsonBody": "={\n  \"model\": \"llama-3.1-8b-instant\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Tu trabajo es clasificar el mensaje de un usuario sobre cine en una de dos opciones: 'chat' o 'soundtrack'. Si el usuario pide crear, generar o escuchar una banda sonora, canción, melodía o soundtrack de una película de la cartelera, responde 'soundtrack'. Para todo lo demás (preguntas, sinopsis, recomendaciones o saludos), responde 'chat'. Responde ÚNICAMENTE con la palabra 'chat' o 'soundtrack' sin explicaciones ni formato adicional.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($('Webhook').first().json.body.message.text) }}\n    }\n  ]\n}",
         "options": {}
       },
-      "id": "intent-classifier",
+      "id": "af0ef144-7c5c-468b-8687-93a669af89ee",
       "name": "Clasificador de Intención",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
       "position": [
-        500,
-        0
+        -368,
+        112
       ]
     },
     {
@@ -85,23 +85,21 @@
         "rules": {
           "rules": [
             {
-              "value2": "soundtrack",
-              "output": 0
+              "value2": "soundtrack"
             },
             {
-              "value2": "chat",
-              "output": 1
+              "value2": "chat"
             }
           ]
         }
       },
-      "id": "switch-router",
+      "id": "6c316b7d-7bd8-4e2f-9094-c560ae1fb04b",
       "name": "Enrutador de Consultas",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 2,
       "position": [
-        680,
-        0
+        -176,
+        112
       ]
     },
     {
@@ -122,26 +120,26 @@
         "jsonBody": "={{ JSON.stringify({ model: \"llama-3.1-8b-instant\", messages: [{ role: \"system\", content: \"Eres un simpático acomodador de cine. Responde de forma muy amigable basándote en la cartelera que te pasamos.\" }, { role: \"user\", content: \"PREGUNTA: \" + $('Webhook').first().json.body.message.text + \"\\n\\nCARTELERA: \" + JSON.stringify($('Code in JavaScript').first().json.cartelera) }] }) }}",
         "options": {}
       },
-      "id": "f1950b9a-b424-447e-928e-e0800ee9873e",
+      "id": "e5e4ffe4-4651-4c0d-8762-ecbe5567f67a",
       "name": "Chat Acomodador",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
       "position": [
-        860,
-        -100
+        0,
+        0
       ]
     },
     {
       "parameters": {
         "jsCode": "const data = $input.first().json;\nlet respuesta = \"Lo siento, he tenido un problema procesando tu pregunta.\";\n\nif (data && data.choices && data.choices.length > 0) {\n  respuesta = data.choices[0].message.content;\n}\n\nreturn [{ \n  json: { \n    mensaje: respuesta, \n    chat_id: $('Webhook').first().json.body.message.chat.id \n  } \n}];"
       },
-      "id": "91f3b703-bd5f-423c-a9f0-4a6b442bb572",
+      "id": "54f9284c-137d-4fa5-8c63-070bcbf8df28",
       "name": "Extraer Respuesta Chat",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1040,
-        -100
+        192,
+        0
       ]
     },
     {
@@ -153,13 +151,13 @@
         "jsonBody": "={{\n{\n  \"chat_id\": $json.chat_id,\n  \"text\": $json.mensaje,\n  \"parse_mode\": \"Markdown\"\n}\n}}",
         "options": {}
       },
-      "id": "c2099675-b4e0-4c44-bd18-9e963c9d03a1",
+      "id": "a16f85a9-1511-495c-8c4f-ce5336be6827",
       "name": "Enviar Respuesta Telegram",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
       "position": [
-        1220,
-        -100
+        368,
+        0
       ]
     },
     {
@@ -180,26 +178,26 @@
         "jsonBody": "={\n  \"model\": \"llama-3.1-8b-instant\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Eres un compositor experto de bandas sonoras. El usuario quiere generar un tema musical para una película de la cartelera. Basándote en la cartelera que te pasamos, busca la película que indica el usuario y genera un JSON con dos campos:\\n- 'pelicula': El título de la película.\\n- 'style': Un prompt musical descriptivo de 6 a 10 palabras (ej: 'sci-fi electronic synthwave, dramatic brass, hans zimmer style' o 'melancholic piano, soft violin, emotional orchestral').\\nResponde ÚNICAMENTE con el objeto JSON válido, sin explicaciones ni markdown.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify(\"PREGUNTA: \" + $('Webhook').first().json.body.message.text + \"\\n\\nCARTELERA: \" + JSON.stringify($('Code in JavaScript').first().json.cartelera)) }}\n    }\n  ]\n}",
         "options": {}
       },
-      "id": "bso-composer",
+      "id": "8f119cce-a1a1-44a5-ad9a-296663ab9ba0",
       "name": "Generar Prompt Musical",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
       "position": [
-        860,
-        150
+        0,
+        256
       ]
     },
     {
       "parameters": {
         "jsCode": "const responseText = $input.first().json.choices[0].message.content;\nlet result = { pelicula: \"Película\", style: \"ambient, electronic\" };\n\ntry {\n  const cleaned = responseText.replace(/```json/g, \"\").replace(/```/g, \"\").trim();\n  const parsed = JSON.parse(cleaned);\n  if (parsed.pelicula) result.pelicula = parsed.pelicula;\n  if (parsed.style) result.style = parsed.style;\n} catch (e) {\n  result.style = responseText;\n}\n\nreturn [{ \n  json: { \n    pelicula: result.pelicula, \n    style: result.style,\n    caption: `🎵 *Banda Sonora de la Película* 🎬\\n\\n🎥 *Película:* ${result.pelicula}\\n🎹 *Estilo:* ${result.style}\\n\\n*Nota:* Ejecutado en modo de CPU de bajo consumo (Resiliente). ¡Aquí tienes tu melodía de muestra sintetizada en MinIO! ⚡`\n  } \n}];"
       },
-      "id": "parse-prompt",
+      "id": "5b6c3e25-c79f-4dff-96ce-da5539b4421b",
       "name": "Parsear BSO Prompt",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1020,
-        150
+        160,
+        256
       ]
     },
     {
@@ -208,51 +206,29 @@
         "url": "http://comfyui:8188/prompt",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"client_id\": \"n8n_client\",\n  \"prompt\": {\n    \"1\": {\n      \"inputs\": {\n        \"text\": \"{{ $json.style }}\"\n      },\n      \"class_type\": \"CLIPTextEncode\"\n    },\n    \"2\": {\n      \"inputs\": {\n        \"filename_prefix\": \"n8n_soundtrack\",\n        \"audio\": [\"3\", 0]\n      },\n      \"class_type\": \"SaveAudio\"\n    },\n    \"3\": {\n      \"inputs\": {\n        \"text\": \"{{ $json.style }}\",\n        \"duration\": 10\n      },\n      \"class_type\": \"ACE-Step-Generator\"\n    }\n  }\n}",
-        "options": {
-          "neverThrowError": true
-        }
+        "jsonBody": "={\n  \"client_id\": \"n8n_client\",\n  \"prompt\": {\n    \"1\": {\n      \"inputs\": {\n        \"model_size\": \"small\",\n        \"duration\": 4,\n        \"guidance_scale\": 3.0,\n        \"do_sample\": true,\n        \"max_new_tokens\": 150,\n        \"seed\": 444802871,\n        \"prompt\": \"{{ $json.style }}\",\n        \"temperature\": 1.0,\n        \"duration_override\": 0\n      },\n      \"class_type\": \"HuggingFaceMusicGen\"\n    },\n    \"2\": {\n      \"inputs\": {\n        \"filename_prefix\": \"ComfyUI\",\n        \"format\": \"wav\",\n        \"quality\": \"128k\",\n        \"audio\": [\"1\", 0]\n      },\n      \"class_type\": \"SaveAudioStandalone\"\n    }\n  }\n}",
+        "options": {}
       },
-      "id": "comfy-api",
+      "id": "09ac89b5-71d4-4bb9-b34d-102e96736170",
       "name": "ComfyUI Queue Prompt",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
       "position": [
-        1180,
-        150
+        320,
+        256
       ],
       "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "bucketName": "cartelera",
-        "fileKey": "soundtrack_fallback.wav"
-      },
-      "type": "n8n-nodes-base.s3",
-      "typeVersion": 1,
-      "position": [
-        1340,
-        150
-      ],
-      "id": "s3-download-fallback",
-      "name": "Descargar Audio Fallback",
-      "credentials": {
-        "s3": {
-          "id": "st1sNMyibx5gkyoF",
-          "name": "S3 account"
-        }
-      }
     },
     {
       "parameters": {
         "method": "POST",
         "url": "=https://api.telegram.org/bot{{ $env.BOT_TOKEN }}/sendAudio",
         "sendBody": true,
-        "specifyBody": "formData",
-        "formDataParameters": {
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
           "parameters": [
             {
-              "name": "chat_id",
+              "name": "=chat_id",
               "value": "={{ $('Webhook').first().json.body.message.chat.id }}"
             },
             {
@@ -268,14 +244,55 @@
         },
         "options": {}
       },
-      "id": "telegram-audio",
+      "id": "c4611c22-366e-4f6d-a691-497e27ab4434",
       "name": "Enviar Audio Telegram",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
       "position": [
-        1500,
-        150
+        1040,
+        400
       ]
+    },
+    {
+      "parameters": {
+        "amount": 25
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        256
+      ],
+      "id": "f013e5d0-ce75-4501-ba3a-303191aea498",
+      "name": "Wait",
+      "webhookId": "63f287e3-e958-4b37-9d00-a038f2b24eae"
+    },
+    {
+      "parameters": {
+        "command": "ls -t /root/.n8n-files/audio/*.wav | head -n 1"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        672,
+        288
+      ],
+      "id": "d5bc4ae8-5a31-4e62-8e34-4be875df0c07",
+      "name": "Execute Command"
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{ $json.stdout.trim() }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        288
+      ],
+      "id": "69fbd7a0-79ac-4c20-9b94-5a59e143d460",
+      "name": "Read/Write Files from Disk"
     }
   ],
   "pinData": {},
@@ -390,14 +407,36 @@
       "main": [
         [
           {
-            "node": "Descargar Audio Fallback",
+            "node": "Wait",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Descargar Audio Fallback": {
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Execute Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Command": {
+      "main": [
+        [
+          {
+            "node": "Read/Write Files from Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read/Write Files from Disk": {
       "main": [
         [
           {
@@ -414,11 +453,11 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "4110653f-5696-4f24-b66f-5894ea2fca54",
+  "versionId": "f5fcc5f1-74b2-416c-aa5d-8441309e0883",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "48290d566f203b93276bb64d9746dd29d55b9eff1921fdafc197866bb84bdf1b"
   },
-  "id": "2cZ5rE94Sz1Eavu7",
+  "id": "ot5oGY75bgoGdBvx",
   "tags": []
 }

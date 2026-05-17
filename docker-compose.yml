@@ -4,14 +4,15 @@ services:
   n8n:
     image: n8nio/n8n:latest
     container_name: n8n
+    user: "root"
     ports:
       - "5678:5678"
-    # command: start --tunnel
     environment:
       - N8N_BASIC_AUTH_ACTIVE=false
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
       - N8N_ENCRYPTION_KEY=supersecretkey_12345
       - N8N_ENV_VARS_IN_ALLOWED_EXPRESSIONS=BOT_TOKEN,CHAT_ID,BOT_CONCIERTOS_TOKEN,CHAT_CONCIERTOS_ID,GROQ_API_KEY
+      - NODES_EXCLUDE=[]
       - BOT_TOKEN=${BOT_TOKEN}
       - CHAT_ID=${CHAT_ID}
       - BOT_CONCIERTOS_TOKEN=${BOT_CONCIERTOS_TOKEN}
@@ -19,6 +20,7 @@ services:
       - GROQ_API_KEY=${GROQ_API_KEY}
     volumes:
       - n8n_data:/home/node/.n8n
+      - ./data/comfyui/output:/root/.n8n-files
     depends_on:
       - scrapper
     networks:
@@ -69,7 +71,8 @@ services:
     networks:
       - agentes
 
-  # ── ComfyUI: Generación de Canciones con ACE-Step ──────────────────────────
+
+# ── ComfyUI: Generación de Canciones con HuggingFace ──────────────────────────
   comfyui:
     image: yanwk/comfyui-boot:cpu
     container_name: comfyui
@@ -80,7 +83,8 @@ services:
       - ./data/comfyui/output:/root/ComfyUI/output
       - ./data/comfyui/custom_nodes:/root/ComfyUI/custom_nodes
     environment:
-      - CLI_ARGS=--listen --port 8188 --cpu
+      # --force-fp32 obliga a todo el modelo a hacer matemáticas limpias en CPU
+      - CLI_ARGS=--listen --port 8188 --cpu --force-fp32
     networks:
       - agentes
 
