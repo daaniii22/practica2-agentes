@@ -20,6 +20,39 @@
     },
     {
       "parameters": {
+        "bucketName": "cartelera",
+        "fileKey": "cartelera_latest.json"
+      },
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        180,
+        0
+      ],
+      "id": "80c09650-ee46-4cdd-84ca-4e6508b347b7",
+      "name": "Download a file",
+      "credentials": {
+        "s3": {
+          "id": "st1sNMyibx5gkyoF",
+          "name": "S3 account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Leemos el archivo binario de S3\nconst binaryData = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst jsonString = binaryData.toString('utf-8');\nconst cartelera = JSON.parse(jsonString);\n\n// Pasamos toda la cartelera junta en la propiedad \"cartelera\"\nreturn [{ json: { cartelera: cartelera } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        340,
+        0
+      ],
+      "id": "8e7fd6f9-a7d4-41de-8ce3-138ddee98601",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
         "method": "POST",
         "url": "https://api.groq.com/openai/v1/chat/completions",
         "sendHeaders": true,
@@ -33,29 +66,82 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ \n  JSON.stringify({\n    \"model\": \"llama-3.1-8b-instant\",\n    \"messages\": [\n      {\n        \"role\": \"system\",\n        \"content\": \"Eres un simpático acomodador de cine. Un usuario te va a preguntar por las películas. Responde amigablemente usando ÚNICAMENTE los datos de la cartelera que te pasamos. Si no está en la lista, dile que no se proyecta hoy.\"\n      },\n      {\n        \"role\": \"user\",\n        \"content\": \"PREGUNTA DEL USUARIO: \" + $('Webhook').first().json.body.message.text + \"\\n\\nCARTELERA ACTUAL (JSON):\\n\" + JSON.stringify($json.cartelera)\n      }\n    ]\n  })\n}}",
+        "jsonBody": "={\n  \"model\": \"llama-3.1-8b-instant\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Tu trabajo es clasificar el mensaje de un usuario sobre cine en una de dos opciones: 'chat' o 'soundtrack'. Si el usuario pide crear, generar o escuchar una banda sonora, canción, melodía o soundtrack de una película de la cartelera, responde 'soundtrack'. Para todo lo demás (preguntas, sinopsis, recomendaciones o saludos), responde 'chat'. Responde ÚNICAMENTE con la palabra 'chat' o 'soundtrack' sin explicaciones ni formato adicional.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($('Webhook').first().json.body.message.text) }}\n    }\n  ]\n}",
         "options": {}
       },
-      "id": "f1950b9a-b424-447e-928e-e0800ee9873e",
-      "name": "Groq Chat",
+      "id": "intent-classifier",
+      "name": "Clasificador de Intención",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
       "position": [
-        592,
-        16
+        500,
+        0
       ]
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nlet respuesta = \"Lo siento, he tenido un problema procesando tu pregunta.\";\n\nif (data && data.choices && data.choices.length > 0) {\n  respuesta = data.choices[0].message.content;\n}\n\n// Aseguramos el contexto del Webhook con .first()\nreturn [{ \n  json: { \n    mensaje: respuesta, \n    chat_id: $('Webhook').first().json.body.message.chat.id \n  } \n}];"
+        "dataType": "string",
+        "value1": "={{ $json.choices[0].message.content.trim().toLowerCase() }}",
+        "rules": {
+          "rules": [
+            {
+              "value2": "soundtrack",
+              "output": 0
+            },
+            {
+              "value2": "chat",
+              "output": 1
+            }
+          ]
+        }
+      },
+      "id": "switch-router",
+      "name": "Enrutador de Consultas",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 2,
+      "position": [
+        680,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.GROQ_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: \"llama-3.1-8b-instant\", messages: [{ role: \"system\", content: \"Eres un simpático acomodador de cine. Responde de forma muy amigable basándote en la cartelera que te pasamos.\" }, { role: \"user\", content: \"PREGUNTA: \" + $('Webhook').first().json.body.message.text + \"\\n\\nCARTELERA: \" + JSON.stringify($('Code in JavaScript').first().json.cartelera) }] }) }}",
+        "options": {}
+      },
+      "id": "f1950b9a-b424-447e-928e-e0800ee9873e",
+      "name": "Chat Acomodador",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        860,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nlet respuesta = \"Lo siento, he tenido un problema procesando tu pregunta.\";\n\nif (data && data.choices && data.choices.length > 0) {\n  respuesta = data.choices[0].message.content;\n}\n\nreturn [{ \n  json: { \n    mensaje: respuesta, \n    chat_id: $('Webhook').first().json.body.message.chat.id \n  } \n}];"
       },
       "id": "91f3b703-bd5f-423c-a9f0-4a6b442bb572",
-      "name": "Extraer Respuesta",
+      "name": "Extraer Respuesta Chat",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        752,
-        0
+        1040,
+        -100
       ]
     },
     {
@@ -72,23 +158,82 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
       "position": [
-        1008,
-        0
+        1220,
+        -100
       ]
     },
     {
       "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.GROQ_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.1-8b-instant\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Eres un compositor experto de bandas sonoras. El usuario quiere generar un tema musical para una película de la cartelera. Basándote en la cartelera que te pasamos, busca la película que indica el usuario y genera un JSON con dos campos:\\n- 'pelicula': El título de la película.\\n- 'style': Un prompt musical descriptivo de 6 a 10 palabras (ej: 'sci-fi electronic synthwave, dramatic brass, hans zimmer style' o 'melancholic piano, soft violin, emotional orchestral').\\nResponde ÚNICAMENTE con el objeto JSON válido, sin explicaciones ni markdown.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify(\"PREGUNTA: \" + $('Webhook').first().json.body.message.text + \"\\n\\nCARTELERA: \" + JSON.stringify($('Code in JavaScript').first().json.cartelera)) }}\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "bso-composer",
+      "name": "Generar Prompt Musical",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        860,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const responseText = $input.first().json.choices[0].message.content;\nlet result = { pelicula: \"Película\", style: \"ambient, electronic\" };\n\ntry {\n  const cleaned = responseText.replace(/```json/g, \"\").replace(/```/g, \"\").trim();\n  const parsed = JSON.parse(cleaned);\n  if (parsed.pelicula) result.pelicula = parsed.pelicula;\n  if (parsed.style) result.style = parsed.style;\n} catch (e) {\n  result.style = responseText;\n}\n\nreturn [{ \n  json: { \n    pelicula: result.pelicula, \n    style: result.style,\n    caption: `🎵 *Banda Sonora de la Película* 🎬\\n\\n🎥 *Película:* ${result.pelicula}\\n🎹 *Estilo:* ${result.style}\\n\\n*Nota:* Ejecutado en modo de CPU de bajo consumo (Resiliente). ¡Aquí tienes tu melodía de muestra sintetizada en MinIO! ⚡`\n  } \n}];"
+      },
+      "id": "parse-prompt",
+      "name": "Parsear BSO Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1020,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://comfyui:8188/prompt",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"n8n_client\",\n  \"prompt\": {\n    \"1\": {\n      \"inputs\": {\n        \"text\": \"{{ $json.style }}\"\n      },\n      \"class_type\": \"CLIPTextEncode\"\n    },\n    \"2\": {\n      \"inputs\": {\n        \"filename_prefix\": \"n8n_soundtrack\",\n        \"audio\": [\"3\", 0]\n      },\n      \"class_type\": \"SaveAudio\"\n    },\n    \"3\": {\n      \"inputs\": {\n        \"text\": \"{{ $json.style }}\",\n        \"duration\": 10\n      },\n      \"class_type\": \"ACE-Step-Generator\"\n    }\n  }\n}",
+        "options": {}
+      },
+      "id": "comfy-api",
+      "name": "ComfyUI Queue Prompt",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1180,
+        150
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
         "bucketName": "cartelera",
-        "fileKey": "cartelera_latest.json"
+        "fileKey": "soundtrack_fallback.wav"
       },
       "type": "n8n-nodes-base.s3",
       "typeVersion": 1,
       "position": [
-        240,
-        0
+        1340,
+        150
       ],
-      "id": "80c09650-ee46-4cdd-84ca-4e6508b347b7",
-      "name": "Download a file",
+      "id": "s3-download-fallback",
+      "name": "Descargar Audio Fallback",
       "credentials": {
         "s3": {
           "id": "st1sNMyibx5gkyoF",
@@ -98,31 +243,41 @@
     },
     {
       "parameters": {
-        "jsCode": "// Leemos el archivo binario de S3 (asumiendo que está en la propiedad \"data\")\nconst binaryData = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst jsonString = binaryData.toString('utf-8');\nconst cartelera = JSON.parse(jsonString);\n\n// Pasamos toda la cartelera junta en la propiedad \"cartelera\"\nreturn [{ json: { cartelera: cartelera } }];"
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.BOT_TOKEN }}/sendAudio",
+        "sendBody": true,
+        "specifyBody": "formData",
+        "formDataParameters": {
+          "parameters": [
+            {
+              "name": "chat_id",
+              "value": "={{ $('Webhook').first().json.body.message.chat.id }}"
+            },
+            {
+              "name": "caption",
+              "value": "={{ $('Parsear BSO Prompt').first().json.caption }}"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "audio",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
       },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "id": "telegram-audio",
+      "name": "Enviar Audio Telegram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
       "position": [
-        416,
-        0
-      ],
-      "id": "8e7fd6f9-a7d4-41de-8ce3-138ddee98601",
-      "name": "Code in JavaScript"
+        1500,
+        150
+      ]
     }
   ],
   "pinData": {},
   "connections": {
-    "Extraer Respuesta": {
-      "main": [
-        [
-          {
-            "node": "Enviar Respuesta Telegram",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Webhook": {
       "main": [
         [
@@ -145,22 +300,106 @@
         ]
       ]
     },
-    "Groq Chat": {
+    "Code in JavaScript": {
       "main": [
         [
           {
-            "node": "Extraer Respuesta",
+            "node": "Clasificador de Intención",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Code in JavaScript": {
+    "Clasificador de Intención": {
       "main": [
         [
           {
-            "node": "Groq Chat",
+            "node": "Enrutador de Consultas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enrutador de Consultas": {
+      "main": [
+        [
+          {
+            "node": "Generar Prompt Musical",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Chat Acomodador",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chat Acomodador": {
+      "main": [
+        [
+          {
+            "node": "Extraer Respuesta Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraer Respuesta Chat": {
+      "main": [
+        [
+          {
+            "node": "Enviar Respuesta Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generar Prompt Musical": {
+      "main": [
+        [
+          {
+            "node": "Parsear BSO Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parsear BSO Prompt": {
+      "main": [
+        [
+          {
+            "node": "ComfyUI Queue Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ComfyUI Queue Prompt": {
+      "main": [
+        [
+          {
+            "node": "Descargar Audio Fallback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Descargar Audio Fallback": {
+      "main": [
+        [
+          {
+            "node": "Enviar Audio Telegram",
             "type": "main",
             "index": 0
           }
