@@ -356,7 +356,7 @@ async def main():
         return
 
     if args.campo:
-        print(resultado.get(args.campo, "N/A"))
+        print(resultado.get(args.campo, "N/A").strip())
     else:
         print(json.dumps(resultado, indent=4, ensure_ascii=False))
 
