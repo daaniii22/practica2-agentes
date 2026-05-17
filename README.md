@@ -129,3 +129,33 @@ docker compose up -d --build
    * **Endpoint:** `http://minio:9000` (¡importante usar `minio` en lugar de `localhost` ya que corre dentro de Docker!)
 4. **Configurar Credenciales SMTP:** En el nodo `Send Email` del Agente Conciertos, configura tu SMTP de preferencia.
 5. Activa los tres flujos (*Active* toggle arriba a la derecha).
+
+---
+
+## 📁 Estructura del Repositorio
+
+```text
+├── docker-compose.yml              # Stack completo (n8n, scrapper, minio, comfyui, poller)
+├── Dockerfile.scrapper             # Configuración del contenedor FastAPI + Playwright
+├── server.py                       # Servidor de API que envuelve scrapper.py para llamadas HTTP
+├── poller.py                       # Reenvía mensajes recibidos por Telegram al webhook de n8n
+├── cartelera.py                    # Script de raspado y filtrado por perfil
+├── scrapper.py                    # Analizador del detalle de películas en IMDb
+├── .env.example                    # Plantilla de variables de entorno para despliegue
+├── n8n_workflows/                  # Ficheros JSON de los workflows para n8n
+│   ├── Cartelera Semanal.json
+│   ├── Chat interactivo para la cartelera.json
+│   └── Agente Conciertos.json
+└── README.md                       # Documentación técnica
+```
+
+---
+
+## 📽️ Entregable Final
+
+El proyecto cumple todos los requisitos teóricos y prácticos para ser desplegado y evaluado de forma autónoma:
+*   [scrapper.py](file:///media/brian/ssd_extra/CDIA%203%C2%BA/2%C2%BA%20Cuatrimestre/Sistemas%20Inteligentes/practica2-agentes/scrapper.py) (IMDb extractor CLI).
+*   [cartelera.py](file:///media/brian/ssd_extra/CDIA%203%C2%BA/2%C2%BA%20Cuatrimestre/Sistemas%20Inteligentes/practica2-agentes/cartelera.py) (Analizador de películas y perfilamiento).
+*   [server.py](file:///media/brian/ssd_extra/CDIA%203%C2%BA/2%C2%BA%20Cuatrimestre/Sistemas%20Inteligentes/practica2-agentes/server.py) (Punto de entrada de API REST para Docker).
+*   Ficheros de workflows definitivos en [n8n_workflows/](file:///media/brian/ssd_extra/CDIA%203%C2%BA/2%C2%BA%20Cuatrimestre/Sistemas%20Inteligentes/practica2-agentes/n8n_workflows).
+*   Stack listo para desplegar con `docker compose up -d`.
