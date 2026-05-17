@@ -1,12 +1,12 @@
-# 🎬 Agente Inteligente de Cartelera y Conciertos con n8n, Groq, S3 y ComfyUI (MusicGen-HF)
+# Agente Inteligente de Cartelera y Conciertos con n8n, Groq, S3 y ComfyUI (MusicGen-HF)
 
-Este repositorio contiene una práctica avanzada de **Sistemas Inteligentes** (IA Agéntica) para la automatización, extracción, análisis, maquetación y distribución de la cartelera de cine de Madrid y eventos musicales/conciertos.
+Este repositorio contiene una de **Sistemas Inteligentes** para la automatización, extracción, análisis, maquetación y distribución de la cartelera de cine de Madrid y eventos musicales/conciertos.
 
-El sistema orquesta múltiples microservicios locales en Docker mediante **n8n**, delegando la lógica cognitiva a **Llama 3.1** (a través de **Groq** para máxima velocidad) y almacenando el histórico de ejecuciones en un bucket **S3 local (MinIO)**. Incorpora además **ComfyUI** para la generación dinámica de bandas sonoras personalizadas en tiempo real mediante **HuggingFace MusicGen**.
+El sistema orquesta múltiples microservicios locales en Docker mediante **n8n**, delegando la lógica cognitiva a **Llama 3.1** (a través de **Groq**) y almacenando el histórico de ejecuciones en un bucket **S3 local (MinIO)**. Incorpora además **ComfyUI** para la generación dinámica de bandas sonoras personalizadas en tiempo real mediante **HuggingFace MusicGen**.
 
 ---
 
-## 🏗️ Arquitectura Completa del Stack
+## Arquitectura Completa del Stack
 
 El ecosistema está completamente contenedorizado en Docker, desacoplado y optimizado para ejecutarse localmente:
 
@@ -59,7 +59,7 @@ El ecosistema está completamente contenedorizado en Docker, desacoplado y optim
 
 Los workflows se encuentran en la carpeta `n8n_workflows/` listos para ser importados en tu instancia local de n8n:
 
-### 1. 📅 [Cartelera Semanal](file:///media/brian/ssd_extra/CDIA%203%C2%BA/2%C2%BA%20Cuatrimestre/Sistemas%20Inteligentes/practica2-agentes/n8n_workflows/Cartelera%20Semanal.json)
+### 1.[Cartelera Semanal]
 *   **Trigger:** Cada lunes a las 9:00 AM (o manual).
 *   **Funcionamiento:** 
     1. Llama al microservicio `scrapper` para extraer las películas de Madrid filtradas por el perfil del usuario.
@@ -67,7 +67,7 @@ Los workflows se encuentran en la carpeta `n8n_workflows/` listos para ser impor
     3. Envía el mensaje segmentado automáticamente a Telegram.
     4. **Persistencia S3:** Guarda en MinIO `cartelera_latest.json` (consumo inmediato) y `cartelera_YYYY_MM_DD.json` (histórico semanal).
 
-### 2. 💬 [Chat Interactivo para la Cartelera](file:///media/brian/ssd_extra/CDIA%203%C2%BA/2%C2%BA%20Cuatrimestre/Sistemas%20Inteligentes/practica2-agentes/n8n_workflows/Chat%20interactivo%20para%20la%20cartelera.json)
+### 2.[Chat Interactivo para la Cartelera]
 *   **Trigger:** Al recibir cualquier comando o mensaje por el bot de Telegram.
 *   **Funcionamiento con Agente de Generación de Banda Sonora:**
     1. Descarga en caliente la cartelera desde MinIO S3.
@@ -79,7 +79,7 @@ Los workflows se encuentran en la carpeta `n8n_workflows/` listos para ser impor
         *   **Wait & Execute Command:** El flujo de n8n hace una pausa de 25 segundos y ejecuta un comando Shell (`ls -t /root/.n8n-files/audio/*.wav | head -n 1`) para encontrar el audio generado.
         *   **Read file from disk:** Lee el archivo `.wav` directamente del volumen de salida compartido y lo envía de forma multipart al chat del usuario a través del método `sendAudio` de Telegram.
 
-### 3. 🎸 [Agente Conciertos](file:///media/brian/ssd_extra/CDIA%203%C2%BA/2%C2%BA%20Cuatrimestre/Sistemas%20Inteligentes/practica2-agentes/n8n_workflows/Agente%20Conciertos.json)
+### 3.[Agente Conciertos]
 *   **Trigger:** Cada lunes a las 10:00 AM.
 *   **Funcionamiento:**
     1. Obtiene los eventos musicales de la API oficial de datos abiertos del Ayuntamiento de Madrid.
@@ -89,7 +89,7 @@ Los workflows se encuentran en la carpeta `n8n_workflows/` listos para ser impor
 
 ---
 
-## 🛠️ Optimización y Compartición de Volúmenes (ComfyUI ➔ n8n)
+## Optimización y Compartición de Volúmenes (ComfyUI ➔ n8n)
 
 > [!IMPORTANT]
 > **El Puente de Volumen Directo:** Para que la banda sonora se envíe de manera instantánea y automática a Telegram sin descargas por red ni latencias, hemos configurado un volumen compartido directo en Docker:
@@ -106,7 +106,7 @@ Los workflows se encuentran en la carpeta `n8n_workflows/` listos para ser impor
 
 ---
 
-## 🚀 Guía de Despliegue Rápido
+## Guía de Despliegue
 
 ### Requisitos Previos
 *   Docker y Docker Compose.
@@ -150,24 +150,3 @@ docker compose up -d --build
    * **Endpoint:** `http://minio:9000` (¡importante usar `minio` en lugar de `localhost` ya que corre dentro de Docker!)
 4. **Configurar Credenciales SMTP:** En el nodo `Send Email` del Agente Conciertos, configura tu SMTP de preferencia (por ejemplo, Gmail con contraseña de aplicación).
 5. Activa los tres flujos (*Active* toggle arriba a la derecha).
-
----
-
-## 📁 Estructura del Repositorio
-
-```text
-├── docker-compose.yml              # Stack completo (n8n, scrapper, minio, comfyui, poller)
-├── Dockerfile.scrapper             # Configuración del contenedor FastAPI + Playwright
-├── server.py                       # Servidor de API que envuelve scrapper.py para llamadas HTTP
-├── poller.py                       # Reenvía mensajes recibidos por Telegram al webhook de n8n
-├── cartelera.py                    # Script de raspado y filtrado por perfil
-├── scrapper.py                    # Analizador del detalle de películas en IMDb
-├── .env.example                    # Plantilla de variables de entorno para despliegue
-├── n8n_workflows/                  # Ficheros JSON de los workflows para n8n
-│   ├── Cartelera Semanal.json
-│   ├── Chat interactivo para la cartelera.json
-│   └── Agente Conciertos.json
-├── comfyui_workflows/              # Flujo visual de ComfyUI para importación directa
-│   └── comfyUi_MusicGen-HF.json   # Workflow visual de HuggingFace MusicGen (Arrastrar y Soltar)
-└── README.md                       # Documentación técnica
-```
