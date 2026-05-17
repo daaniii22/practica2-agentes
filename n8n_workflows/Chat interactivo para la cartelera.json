@@ -1,0 +1,183 @@
+{
+  "name": "Chat interactivo para la cartelera",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chat",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "c4c03f86-4969-4c9b-b37f-a37e2006993c",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "chat-webhook-1234"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.GROQ_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ \n  JSON.stringify({\n    \"model\": \"llama-3.1-8b-instant\",\n    \"messages\": [\n      {\n        \"role\": \"system\",\n        \"content\": \"Eres un simpático acomodador de cine. Un usuario te va a preguntar por las películas. Responde amigablemente usando ÚNICAMENTE los datos de la cartelera que te pasamos. Si no está en la lista, dile que no se proyecta hoy.\"\n      },\n      {\n        \"role\": \"user\",\n        \"content\": \"PREGUNTA DEL USUARIO: \" + $('Webhook').first().json.body.message.text + \"\\n\\nCARTELERA ACTUAL (JSON):\\n\" + JSON.stringify($json.cartelera)\n      }\n    ]\n  })\n}}",
+        "options": {}
+      },
+      "id": "f1950b9a-b424-447e-928e-e0800ee9873e",
+      "name": "Groq Chat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        592,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nlet respuesta = \"Lo siento, he tenido un problema procesando tu pregunta.\";\n\nif (data && data.choices && data.choices.length > 0) {\n  respuesta = data.choices[0].message.content;\n}\n\n// Aseguramos el contexto del Webhook con .first()\nreturn [{ \n  json: { \n    mensaje: respuesta, \n    chat_id: $('Webhook').first().json.body.message.chat.id \n  } \n}];"
+      },
+      "id": "91f3b703-bd5f-423c-a9f0-4a6b442bb572",
+      "name": "Extraer Respuesta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        752,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.BOT_TOKEN }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  \"chat_id\": $json.chat_id,\n  \"text\": $json.mensaje,\n  \"parse_mode\": \"Markdown\"\n}\n}}",
+        "options": {}
+      },
+      "id": "c2099675-b4e0-4c44-bd18-9e963c9d03a1",
+      "name": "Enviar Respuesta Telegram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1008,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "bucketName": "cartelera",
+        "fileKey": "cartelera_latest.json"
+      },
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        240,
+        0
+      ],
+      "id": "80c09650-ee46-4cdd-84ca-4e6508b347b7",
+      "name": "Download a file",
+      "credentials": {
+        "s3": {
+          "id": "st1sNMyibx5gkyoF",
+          "name": "S3 account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Leemos el archivo binario de S3 (asumiendo que está en la propiedad \"data\")\nconst binaryData = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst jsonString = binaryData.toString('utf-8');\nconst cartelera = JSON.parse(jsonString);\n\n// Pasamos toda la cartelera junta en la propiedad \"cartelera\"\nreturn [{ json: { cartelera: cartelera } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "8e7fd6f9-a7d4-41de-8ce3-138ddee98601",
+      "name": "Code in JavaScript"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Extraer Respuesta": {
+      "main": [
+        [
+          {
+            "node": "Enviar Respuesta Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Download a file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download a file": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat": {
+      "main": [
+        [
+          {
+            "node": "Extraer Respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Groq Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "4110653f-5696-4f24-b66f-5894ea2fca54",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "48290d566f203b93276bb64d9746dd29d55b9eff1921fdafc197866bb84bdf1b"
+  },
+  "id": "2cZ5rE94Sz1Eavu7",
+  "tags": []
+}

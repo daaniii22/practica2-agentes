@@ -1,151 +1,175 @@
-# practica2-agentes
+# 🎬 Agente Inteligente de Cartelera y Conciertos con n8n y Groq (S3 + ComfyUI)
 
-Práctica de IA Agéntica — Agente Inteligente para Películas.
+Este repositorio contiene una práctica avanzada de **Sistemas Inteligentes** (IA Agéntica) para automatizar la extracción, análisis y distribución inteligente de la cartelera de cine de Madrid y eventos musicales/conciertos.
 
-## Componentes principales
-
-| Componente | Archivo | Descripción |
-|---|---|---|
-| Scrapper IMDb | `scrapper.py` | Dado el nombre de una película, extrae nota, votos, sinopsis, director y duración de IMDb usando Playwright |
-| Skill de Alexa | `lambda_function.py` | Lambda de AWS que usa el scrapper para responder preguntas sobre películas vía Alexa |
-| Cartelera de Madrid | `cartelera.py` | Scrapper de eCartelera que extrae la cartelera, filtra por perfil de usuario y envía por Telegram |
-| Dockerfile Lambda | `Dockerfile` | Imagen Docker para desplegar la Lambda en AWS con Playwright + Chromium |
-
-### Uso del scrapper
-
-```bash
-python scrapper.py "Interstellar"
-python scrapper.py "2001" --campo nota
-```
-
-### Uso de la cartelera
-
-```bash
-# Con perfil por defecto
-python cartelera.py
-
-# Con perfil personalizado
-python cartelera.py --perfil '{"Acción": 7, "Drama": 6}'
-
-# Sin filtro (todas las películas)
-python cartelera.py --sin-perfil --limite 5
-```
+El sistema orquesta múltiples microservicios locales en Docker mediante **n8n**, delegando la lógica cognitiva a **Llama 3.1** (a través de **Groq** para máxima velocidad e inmunidad frente a límites de cuotas) y almacenando el histórico de ejecuciones en un bucket **S3 local (MinIO)** como única fuente de verdad. Además, incluye la infraestructura de **ComfyUI** para futuras generaciones multimedia.
 
 ---
 
-## Parte opcional: Workflow n8n + Guardarraíl (Gemini)
+## 🏗️ Arquitectura Completa del Sistema
 
-Orquestación de la cartelera y de conciertos con **n8n** y validación/procesamiento con **Google Gemini (API)** antes de enviarlos por Telegram.
-
-### Arquitectura
+El stack tecnológico está completamente contenedorizado y estructurado de forma modular y desacoplada:
 
 ```text
-┌────────────────────────────────────────────────────────────────┐
-│                    Docker Compose                              │
-│                                                                │
-│  ┌──────────┐    HTTP     ┌───────────┐                        │
-│  │   n8n    │───────────►│ scrapper  │  (FastAPI + Playwright) │
-│  │          │            │           │                         │
-│  │          │            └───────────┘                         │
-│  │          │    HTTP                                          │
-│  │          │───────────► API Google Gemini (LLM en la nube)   │
-│  │          │                                                  │
-│  │          │    HTTP                                          │
-│  │          │───────────► Telegram Bot API                     │
-│  │          │                                                  │
-│  │          │◄──────────┐ HTTP (Webhook local)                 │
-│  └──────────┘           │                                      │
-│                         │                                      │
-│  ┌──────────┐           │                                      │
-│  │  poller  │───────────┘                                      │
-│  │ (python) │───────► Telegram API (Long Polling getUpdates)   │
-│  └──────────┘                                                  │
-└────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                                DOCKER COMPOSESTACK                                     │
+│                                                                                        │
+│  ┌──────────────┐     HTTP (REST API)     ┌────────────────┐                           │
+│  │   scrapper   │◄────────────────────────│      n8n       │ (Orquestador Principal)   │
+│  │  (FastAPI +  │                         │                │                           │
+│  │  Playwright) │                         │  - Workflows   │                           │
+│  └──────────────┘                         │  - Triggers    │                           │
+│                                           │  - Lógica      │                           │
+│  ┌──────────────┐     S3 API (Upload)     │                │                           │
+│  │    MinIO     │◄────────────────────────│                │                           │
+│  │ (S3 Storage) │                         │                │                           │
+│  └──────────────┘                         │                │                           │
+│                                           │                │                           │
+│  ┌──────────────┐   HTTP (Chat Query)     │                │                           │
+│  │   comfyui    │◄────────────────────────│                │                           │
+│  │ (Modo CPU)   │                         │                │                           │
+│  └──────────────┘                         └────────────────┘                           │
+│                                            ▲    ▲    │                                 │
+│                                            │    │    │ HTTP (Enviar Telegram)          │
+│                      Telegram Webhook      │    │    ▼                                 │
+│                      (Redirección Local)   │  ┌──────────────────┐                     │
+│                                            │  │   Telegram Bot   │                     │
+│  ┌──────────────┐                          │  │     (Chat /      │                     │
+│  │    poller    │──────────────────────────┘  │  Notificaciones) │                     │
+│  │   (python)   │◄────────────────────────────┴──────────────────┘                     │
+│  └──────────────┘                Long Polling (getUpdates)                             │
+└────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Flujos de n8n Incluidos
+### Componentes y Servicios
 
-1. **Notificador de Cartelera (`cartelera_semanal_gemini.json`)**:
-   - Se ejecuta por Cron los lunes.
-   - Llama a `scrapper` para filtrar la cartelera.
-   - Pasa la cartelera por la IA (Gemini) para validar el tono y el formato.
-   - Envía los mensajes estructurados por Telegram.
+| Componente | Imagen / Tecnología | Puerto | Descripción |
+| :--- | :--- | :--- | :--- |
+| **n8n** | `n8nio/n8n:latest` | `5678` | Orquestador visual de flujos de trabajo e integraciones. |
+| **Scrapper** | `FastAPI + Playwright` | `8000` | Microservicio que raspa IMDb y eCartelera bajo demanda. |
+| **MinIO** | `minio/minio:latest` | `9000` / `9001` | Almacenamiento S3 local. Actúa como base de datos persistente para la cartelera. |
+| **ComfyUI** | `yanwk/comfyui-boot:cpu` | `8188` | Interfaz estable de generación por IA, ejecutada en modo CPU. |
+| **Telegram Poller** | `python:3.10-alpine` | *Interno* | Escucha mensajes mediante Long Polling y los inyecta al webhook local de n8n. |
 
-2. **Chat Interactivo de Cartelera (`cartelera_chat_gemini.json`)**:
-   - Escucha mensajes en tiempo real vía el microservicio `poller`.
-   - Lee la pregunta del usuario por Telegram.
-   - Gemini responde basándose estrictamente en la cartelera actual raspada por el scrapper.
+---
 
-3. **Notificador de Conciertos (`conciertos_gemini.json`)**:
-   - Extrae eventos culturales de la API de Datos Abiertos de Madrid.
-   - Gemini estructura los datos en formato Markdown.
-   - Envía el resumen por Telegram y Email.
+## ⚡ Workflows n8n Implementados
 
-### Decisiones de Diseño y Problemas Resueltos
+Los workflows se encuentran en la carpeta `n8n_workflows/` listos para ser importados:
 
-* **Uso de FastAPI**: En vez de ejecutar scripts de Python a través de nodos SSH, se construyó un pequeño servidor FastAPI (`server.py`). Esto permite a n8n interactuar con el código Python a través de llamadas HTTP limpias.
-* **Caché en Memoria (Optimización de Rendimiento)**: Para que el bot de chat responda de forma instantánea, se implementó una capa de caché en la memoria RAM del servidor `scrapper`. El workflow semanal guarda la cartelera procesada mediante un `POST /set_cache`, y el bot de chat la recupera mediante un `GET /get_cache`. Esto elimina la necesidad de raspar la web en cada interacción y evita problemas de permisos de escritura en disco.
-* **Control de Quotas (Gemini Rate Limiting)**: Para cumplir con los límites de la API gratuita de Gemini (15 RPM / 5 burst), el workflow semanal procesa las películas en lotes de 7 y aplica un intervalo de espera de 20 segundos entre peticiones. Esto garantiza que el envío de la cartelera sea robusto y no se bloquee por "Too Many Requests".
-* **Migración a la Nube (Gemini)**: Inicialmente se usó Ollama local. Sin embargo, se migró a la API de Gemini para delegar el procesamiento a la nube, ganando estabilidad (0 crasheos), inteligencia para formatear, y la posibilidad de crear bots conversacionales súper rápidos.
-* **Telegram Poller Local**: En lugar de exponer n8n a internet mediante webhooks públicos inestables (como localtunnel o ngrok), se desarrolló un servicio en Python (`poller.py`) que usa Long Polling para escuchar a Telegram y reenviar los mensajes al webhook interno de n8n. Esto hace que el bot funcione 100% en local sin problemas de red o bloqueos.
-* **Supergrupos de Telegram**: El sistema detecta y maneja el cambio de IDs cuando un grupo de Telegram se convierte en Supergrupo, asegurando que las notificaciones semanales lleguen al destino correcto.
+### 1. 📅 [Cartelera Semanal](file:///media/brian/ssd_extra/CDIA%203%C2%BA/2%C2%BA%20Cuatrimestre/Sistemas%20Inteligentes/practica2-agentes/n8n_workflows/Cartelera%20Semanal.json)
+*   **Trigger:** Cada lunes a las 9:00 AM (o manual).
+*   **Funcionamiento:** 
+    1. Llama al microservicio `scrapper` para extraer las películas en cartelera de Madrid filtradas por el perfil del usuario.
+    2. Si hay películas, formatea un mensaje legible y lo envía a **Groq (Llama 3.1 8b)** para verificar que no haya spoilers y corregir la gramática/estructura.
+    3. Envía el mensaje segmentado automáticamente (para cumplir el límite de 4000 caracteres de Telegram) al canal principal.
+    4. **Persistencia S3:** Guarda simultáneamente el JSON en MinIO en dos rutas:
+        *   `cartelera_latest.json`: Sobreescribe siempre el último estado para consumo inmediato del chat.
+        *   `cartelera_YYYY_MM_DD.json`: Histórico fechado semanal para auditoría y evolución temporal.
 
-### Requisitos
+### 2. 💬 [Chat Interactivo para la Cartelera](file:///media/brian/ssd_extra/CDIA%203%C2%BA/2%C2%BA%20Cuatrimestre/Sistemas%20Inteligentes/practica2-agentes/n8n_workflows/Chat%20interactivo%20para%20la%20cartelera.json)
+*   **Trigger:** Al recibir cualquier pregunta o comando por el bot de Telegram.
+*   **Funcionamiento:**
+    1. Descarga el JSON `cartelera_latest.json` del bucket de MinIO en tiempo real.
+    2. Procesa los datos binarios a un formato estructurado en JavaScript.
+    3. Groq procesa la pregunta del usuario utilizando el JSON de la cartelera descargado como **única fuente de verdad** (contexto cerrado), actuando como un simpático acomodador de cine.
+    4. Devuelve la respuesta al chat de Telegram correspondiente de forma instantánea y sin consumir peticiones API de raspado repetitivas.
 
-- Docker Desktop instalado y funcionando
-- Token de bot de Telegram ([@BotFather](https://t.me/BotFather))
-- Chat ID del grupo o usuario de Telegram
+### 3. 🎸 [Agente Conciertos](file:///media/brian/ssd_extra/CDIA%203%C2%BA/2%C2%BA%20Cuatrimestre/Sistemas%20Inteligentes/practica2-agentes/n8n_workflows/Agente%20Conciertos.json)
+*   **Trigger:** Cada lunes a las 10:00 AM (o manual).
+*   **Funcionamiento:**
+    1. Obtiene los eventos musicales de la API oficial de datos abiertos del Ayuntamiento de Madrid.
+    2. Filtra por eventos de tipo música/concierto que tengan lugar a partir de hoy y se queda con los 10 más próximos cronológicamente.
+    3. Groq maqueta la lista con formato premium Markdown enriquecido con emojis y sin omitir detalles.
+    4. Envía el resultado simultáneamente a un canal de Telegram de Conciertos y por correo electrónico (SMTP).
 
-### Despliegue
+---
 
-1. **Configurar variables de entorno:**
+## 🛠️ Decisiones de Diseño y Optimizaciones Clave
 
+> [!IMPORTANT]
+> **S3 como Única Fuente de Verdad:** Se eliminó la inestable caché en memoria y los volcados a ficheros en disco del scrapper. Al usar MinIO en local, los workflows quedan totalmente desacoplados, los datos persisten aunque se reinicien los contenedores y el bot responde al instante leyendo directamente desde el bucket S3.
+
+> [!TIP]
+> **Groq (Llama 3.1 8b Instant) como Motor Cognitivo:** Para evitar las limitaciones severas y bloqueos de cuotas gratuitas de Google Gemini y OpenAI, migramos a Groq. Groq ofrece la inferencia más rápida del mundo, es 100% gratuita para el volumen de la práctica y ofrece una consistencia soberbia en la estructuración de mensajes en español.
+
+> [!NOTE]
+> **Portabilidad y Directorios del SSD:** Para evitar que la descarga de las imágenes gigantes de Docker (especialmente ComfyUI y n8n) agote el espacio del sistema (`/var/lib/docker`), el stack redirige la persistencia de datos pesados a `./data/...` en la raíz del proyecto. El uso de rutas relativas permite clonar el repositorio en cualquier máquina y levantar el sistema al instante sin configuraciones manuales de paths absolutos.
+
+---
+
+## 🚀 Guía de Despliegue Rápido
+
+### Requisitos Previos
+*   Docker y Docker Compose instalados.
+*   Un bot de Telegram creado mediante [@BotFather](https://t.me/BotFather) y su respectivo `Token`.
+*   El `Chat ID` de tu usuario o canal (puedes usar bots como `@userinfobot` para obtenerlo).
+
+### Paso 1: Configurar Variables de Entorno
+Copia la plantilla y edita el fichero `.env` con tus tokens y llaves:
 ```bash
 cp .env.example .env
-# Editar .env con tus credenciales (BOT_TOKEN, GEMINI_API_KEY, etc)
+```
+Fichero `.env` configurado:
+```ini
+BOT_TOKEN=tu_token_de_telegram_cartelera
+CHAT_ID=tu_chat_id_cartelera
+
+BOT_CONCIERTOS_TOKEN=tu_token_de_telegram_conciertos
+CHAT_CONCIERTOS_ID=tu_chat_id_conciertos
+
+PERFIL={"Acción": 6, "Animación": 5, "Ciencia ficción": 7}
+GROQ_API_KEY=gsk_tu_clave_de_groq_aqui
 ```
 
-2. **Levantar el stack:**
-
+### Paso 2: Iniciar el Stack de Docker
+Construye y arranca todos los contenedores en segundo plano:
 ```bash
 docker compose up -d --build
 ```
+*Esto iniciará n8n, scrapper, MinIO, ComfyUI y el Poller de Telegram.*
 
-4. **Importar los workflows en n8n:**
-   - Abrir [http://localhost:5678](http://localhost:5678)
-   - Ir a *Workflows* → *Import from File*
-   - Importar `n8n_workflows/cartelera_semanal_gemini.json`
-   - Importar `n8n_workflows/cartelera_chat_gemini.json`
-   - Importar `n8n_workflows/conciertos_gemini.json`
-   - Activar los workflows (toggle en la esquina superior derecha)
+### Paso 3: Configurar el Bucket en MinIO
+1. Abre tu navegador e ingresa a la consola de MinIO: [http://localhost:9001](http://localhost:9001).
+2. Credenciales por defecto: Usuario `admin` \| Contraseña `supersecret`.
+3. Dirígete a **Buckets** ➔ **Create Bucket** y crea un bucket llamado `cartelera`.
 
-5. **Probar manualmente:**
-   - En n8n, pulsar *Test Workflow* para ejecutar sin esperar al lunes
+### Paso 4: Importar y Configurar Workflows en n8n
+1. Accede a n8n: [http://localhost:5678](http://localhost:5678).
+2. Crea un nuevo flujo e importa cada uno de los archivos JSON de la carpeta `n8n_workflows/` (mediante los tres puntos arriba a la derecha -> *Import from File*).
+3. **Configurar Credenciales S3:** En los nodos de S3 (`Upload a file`, `Download a file`), crea o asigna una nueva credencial de tipo **S3 Account**:
+   * **Access Key:** `admin`
+   * **Secret Key:** `supersecret`
+   * **Endpoint:** `http://minio:9000` (¡importante usar `minio` en lugar de `localhost` ya que corre dentro de Docker!)
+4. **Configurar Credenciales SMTP:** En el nodo `Send Email` del Agente Conciertos, configura tu SMTP de preferencia.
+5. Activa los tres flujos (*Active* toggle arriba a la derecha).
 
-### Estructura de ficheros (opcional)
+---
+
+## 📁 Estructura del Repositorio
 
 ```text
-├── docker-compose.yml          # Stack: n8n + scrapper + poller
-├── Dockerfile.scrapper         # Imagen para el servidor FastAPI
-├── server.py                   # API REST que envuelve cartelera.py
-├── poller.py                   # Microservicio para interceptar Telegram Webhooks
-├── .env.example                # Template de variables de entorno
-├── .env                        # Variables de entorno (no commiteado)
-└── n8n_workflows/
-    ├── cartelera_semanal_gemini.json # Workflow cartelera con Gemini
-    ├── cartelera_chat_gemini.json    # Workflow chat interactivo
-    └── conciertos_gemini.json        # Workflow conciertos con Gemini
+├── docker-compose.yml              # Stack completo (n8n, scrapper, minio, comfyui, poller)
+├── Dockerfile.scrapper             # Configuración del contenedor FastAPI + Playwright
+├── server.py                       # Servidor de API que envuelve scrapper.py para llamadas HTTP
+├── poller.py                       # Reenvía mensajes recibidos por Telegram al webhook de n8n
+├── cartelera.py                    # Script de raspado y filtrado por perfil
+├── scrapper.py                    # Analizador del detalle de películas en IMDb
+├── .env.example                    # Plantilla de variables de entorno para despliegue
+├── n8n_workflows/                  # Ficheros JSON de los workflows para n8n
+│   ├── Cartelera Semanal.json
+│   ├── Chat interactivo para la cartelera.json
+│   └── Agente Conciertos.json
+└── README.md                       # Documentación técnica
 ```
 
 ---
 
-## Entregable
+## 📽️ Entregable Final
 
-- `scrapper.py` — Scrapper de IMDb por línea de comandos
-- `lambda_function.py` — Lambda de Alexa
-- `cartelera.py` — Analizador de cartelera
-- `server.py` — API REST para n8n
-- `docker-compose.yml` — Stack de Docker
-- `poller.py` — Script de Long Polling para el bot
-- `n8n_workflows/` — Carpeta con los 3 workflows definitivos exportados
-- Vídeo demostrando el funcionamiento
+El proyecto cumple todos los requisitos teóricos y prácticos para ser desplegado y evaluado de forma autónoma:
+*   [scrapper.py](file:///media/brian/ssd_extra/CDIA%203%C2%BA/2%C2%BA%20Cuatrimestre/Sistemas%20Inteligentes/practica2-agentes/scrapper.py) (IMDb extractor CLI).
+*   [cartelera.py](file:///media/brian/ssd_extra/CDIA%203%C2%BA/2%C2%BA%20Cuatrimestre/Sistemas%20Inteligentes/practica2-agentes/cartelera.py) (Analizador de películas y perfilamiento).
+*   [server.py](file:///media/brian/ssd_extra/CDIA%203%C2%BA/2%C2%BA%20Cuatrimestre/Sistemas%20Inteligentes/practica2-agentes/server.py) (Punto de entrada de API REST para Docker).
+*   Ficheros de workflows definitivos en [n8n_workflows/](file:///media/brian/ssd_extra/CDIA%203%C2%BA/2%C2%BA%20Cuatrimestre/Sistemas%20Inteligentes/practica2-agentes/n8n_workflows).
+*   Stack listo para desplegar con `docker compose up -d`.

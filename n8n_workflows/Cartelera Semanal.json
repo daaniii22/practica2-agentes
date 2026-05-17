@@ -1,0 +1,317 @@
+{
+  "name": "Cartelera Semanal",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "563d0dcd-9cf8-4d42-bc97-c0f4a0db21dd",
+      "name": "Cada Lunes 9:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -3360,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://scrapper:8000/cartelera",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": []
+        },
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "34ec42ab-ffea-4e25-87bf-54dc3e48a75f",
+      "name": "Obtener Cartelera",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -3104,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-1",
+              "leftValue": "={{ $json.total }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c5aea584-2fff-44c0-ac8f-2d1f9535a4dc",
+      "name": "¿Hay películas?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -2848,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Formateamos toda la cartelera en un único mensaje gigante para Gemini\nconst peliculas = $input.first().json.peliculas;\nlet lineas = [];\n\nlineas.push(`🎬 *Cartelera de Madrid — Esta semana*\\n`);\n\nfor (const p of peliculas) {\n  lineas.push(\n    `*${p.titulo}*\\n` +\n    `  🎭 Género: ${p.genero}\\n` +\n    `  ⭐ Nota: ${p.nota}/10 (${p.votos} votos)\\n` +\n    `  🎬 Director: ${p.director}\\n` +\n    `  ⏱️ Duración: ${p.duracion}\\n` +\n    `  📝 ${p.sinopsis}\\n`\n  );\n}\n\nreturn [{ json: { mensaje: lineas.join('\\n\\n') } }];"
+      },
+      "id": "8d0f0ec4-b7f1-4ff8-8a10-0bddde2e46c2",
+      "name": "Formatear Mensaje",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2608,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nlet textoCompleto;\n\ntry {\n  const data = item.json;\n  // Groq usa 'choices' igual que OpenAI\n  if (data && data.choices && data.choices.length > 0) {\n    textoCompleto = data.choices[0].message.content;\n  } else {\n    return [{ json: { mensaje: \"Error: Groq no devolvió texto.\" } }];\n  }\n} catch (e) {\n  return [{ json: { mensaje: \"Error procesando la respuesta de Groq.\" } }];\n}\n\n// Dividimos el texto para Telegram (máx 4000 caracteres)\nconst MAX_LENGTH = 4000;\nconst trozos = [];\nlet posicion = 0;\n\nwhile (posicion < textoCompleto.length) {\n  let fin = posicion + MAX_LENGTH;\n  if (fin < textoCompleto.length) {\n    const ultimoSalto = textoCompleto.lastIndexOf('\\n', fin);\n    if (ultimoSalto > posicion) {\n      fin = ultimoSalto;\n    }\n  }\n  \n  trozos.push({ json: { mensaje: textoCompleto.substring(posicion, fin).trim() } });\n  posicion = fin;\n}\n\nreturn trozos;\n"
+      },
+      "id": "7226e44a-43ee-434f-a7a9-64f82670ca4e",
+      "name": "Extraer Respuesta Guardarraíl",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2112,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.BOT_TOKEN }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $env.CHAT_ID }}\",\n  \"text\": {{ JSON.stringify($json.mensaje) }},\n  \"parse_mode\": \"Markdown\"\n}",
+        "options": {}
+      },
+      "id": "c1fcd2d6-5664-441e-91c5-ab0334bd9147",
+      "name": "Enviar Telegram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1856,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.BOT_TOKEN }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $env.CHAT_ID }}\",\n  \"text\": \"🎬 *Cartelera de Madrid*\\n\\nNo hay películas que cumplan tu perfil esta semana.\",\n  \"parse_mode\": \"Markdown\"\n}",
+        "options": {}
+      },
+      "id": "47b8ac24-cb93-4646-a0be-a89d4c06fc0a",
+      "name": "Sin Películas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -2608,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "cartelera",
+        "fileName": "cartelera_latest.json",
+        "binaryData": false,
+        "fileContent": "={{ JSON.stringify($json) }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        -2816,
+        656
+      ],
+      "id": "69506559-ad2f-4756-88a1-66ac10f8d53f",
+      "name": "Upload a file",
+      "credentials": {
+        "s3": {
+          "id": "st1sNMyibx5gkyoF",
+          "name": "S3 account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "cartelera",
+        "fileName": "={{ 'cartelera_' + $now.format('yyyy_MM_dd') + '.json' }}",
+        "binaryData": false,
+        "fileContent": "={{ JSON.stringify($json) }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        -2832,
+        816
+      ],
+      "id": "1b2ec15a-db61-4fd8-b888-976f4955fd34",
+      "name": "Upload a file1",
+      "credentials": {
+        "s3": {
+          "id": "st1sNMyibx5gkyoF",
+          "name": "S3 account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.GROQ_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.1-8b-instant\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Eres un guardarraíl de contenido. Tu trabajo es revisar un mensaje con recomendaciones de películas que se va a enviar a usuarios por Telegram. Debes verificar que: 1) No contiene spoilers evidentes, 2) El tono es profesional y amigable. Responde SOLO con el mensaje final corregido. Mantén el Markdown.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.mensaje) }}\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "d867fbee-85f5-41d2-bf06-9271aa4e82b4",
+      "name": "Groq Guardrail",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -2368,
+        336
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Cada Lunes 9:00": {
+      "main": [
+        [
+          {
+            "node": "Obtener Cartelera",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Cartelera": {
+      "main": [
+        [
+          {
+            "node": "¿Hay películas?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Upload a file",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Upload a file1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Hay películas?": {
+      "main": [
+        [
+          {
+            "node": "Formatear Mensaje",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sin Películas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Mensaje": {
+      "main": [
+        [
+          {
+            "node": "Groq Guardrail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraer Respuesta Guardarraíl": {
+      "main": [
+        [
+          {
+            "node": "Enviar Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Guardrail": {
+      "main": [
+        [
+          {
+            "node": "Extraer Respuesta Guardarraíl",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "3729ab89-f10d-4ef0-81f3-a7c2c65b18fa",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "48290d566f203b93276bb64d9746dd29d55b9eff1921fdafc197866bb84bdf1b"
+  },
+  "id": "AlTNNSerH9sSKznO",
+  "tags": []
+}
